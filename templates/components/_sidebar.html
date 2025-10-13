@@ -1,0 +1,30 @@
+<!-- templates/components/_sidebar.html -->
+<div class="countdown-section">
+    <div class="countdown-title">Time Remaining</div>
+    <div class="countdown-display" id="countdown">
+        <span>16<small>Days</small></span>
+        <span>17<small>Hours</small></span>
+        <span>45<small>Mins</small></span>
+        <span>19<small>Secs</small></span>
+    </div>
+</div>
+
+<div class="nav-menu">
+    <a href="{% url 'home-page' %}" class="nav-item" data-active="{% if active_menu == 'home' %}true{% else %}false{% endif %}">
+        <i class="fas fa-home"></i>
+        <span>HOME</span>
+    </a>
+    <a href="{% url 'accounts:user_list' %}" class="nav-item" data-active="{% if active_menu == 'home' %}true{% else %}false{% endif %}">
+        <i class="fas fa-users-cog"></i>
+        <span>USER MANAGEMENT</span>
+    </a>
+    <a href="{% url 'events:event_list' %}" class="nav-item" data-active="{% if active_menu == 'home' %}true{% else %}false{% endif %}">
+        <i class="fas fa-star"></i>
+        <span>EVENTS</span>
+    </a>
+     <a href="{% url 'invitations:invitation_list' %}" class="nav-item" data-active="{% if active_menu == 'home' %}true{% else %}false{% endif %}">
+        <i class="fas fa-star"></i>
+        <span>VISITOR INVITATIONS</span>
+    </a>
+    </a>
+</div>

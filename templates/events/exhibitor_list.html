@@ -1,0 +1,40 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Exhibitors{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Exhibitors for {{ event.name }}</h1>
+    <a href="{% url 'events:exhibitor_create' event.id %}" class="btn btn-primary mb-3">Create New Exhibitor</a>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Company Name</th>
+                <th>Phone</th>
+                <th>Booth</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for exhibitor in object_list %}
+            <tr>
+                <td>{{ exhibitor.company_name }}</td>
+                <td>{{ exhibitor.phone_number }}</td>
+                <td>{{ exhibitor.booth }}</td>
+                <td>
+                    <a href="{% url 'events:exhibitor_update' event.id exhibitor.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                    <a href="{% url 'events:exhibitor_delete' event.id exhibitor.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                    <a href="{% url 'events:ticket_allocation_list' event.id exhibitor.pk %}" class="btn btn-info">Manage Tickets</a>
+                    <a href="{% url 'events:teammember_list' event.id exhibitor.pk %}" class="btn btn-success">Manage Team</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4">No exhibitors found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

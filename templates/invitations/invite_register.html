@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register for GITEX GLOBAL 2025</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+        }
+        .register-container {
+            max-width: 500px;
+            width: 100%;
+            padding: 2rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .register-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .register-header h1 {
+            font-size: 1.8rem;
+            color: #1a1a1a;
+        }
+        .register-header p {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .form-control, .form-control:focus {
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            border-radius: 5px;
+            width: 100%;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .error-message {
+            color: #dc3545;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+            display: none;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .loading-overlay.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Registration Form -->
+    <div class="register-container">
+        <div class="register-header">
+            <h1>Register for GITEX GLOBAL 2025</h1>
+            <p>Complete the form below to secure your visitor pass.</p>
+        </div>
+        <form id="registerForm" action="/register/{{ invitation_key }}/" method="POST">
+            <div class="mb-3">
+                <label for="fullName" class="form-label">Full Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="fullName" name="full_name" required>
+                <div id="fullNameError" class="error-message">Please enter your full name</div>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                <input type="email" class="form-control" id="email" name="email" required>
+                <div id="emailError" class="error-message">Please enter a valid email address</div>
+            </div>
+            <div class="mb-3">
+                <label for="phone" class="form-label">Phone Number <span class="text-danger">*</span></label>
+                <input type="tel" class="form-control" id="phone" name="phone" required>
+                <div id="phoneError" class="error-message">Please enter a valid phone number</div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-check me-2"></i>Register
+            </button>
+        </form>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        $(document).ready(function() {
+            // Form validation and submission
+            $('#registerForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                // Reset error messages
+                $('.error-message').hide();
+                let isValid = true;
+
+                // Validate full name
+                const fullName = $('#fullName').val().trim();
+                if (!fullName) {
+                    $('#fullNameError').show();
+                    isValid = false;
+                }
+
+                // Validate email
+                const email = $('#email').val().trim();
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!email || !emailRegex.test(email)) {
+                    $('#emailError').show();
+                    isValid = false;
+                }
+
+                // Validate phone
+                const phone = $('#phone').val().trim();
+                const phoneRegex = /^\+?\d{8,15}$/;
+                if (!phone || !phoneRegex.test(phone)) {
+                    $('#phoneError').show();
+                    isValid = false;
+                }
+
+                if (isValid) {
+                    // Show loading overlay
+                    $('#loadingOverlay').addClass('show');
+
+                    // Simulate form submission (replace with actual AJAX call)
+                    $.ajax({
+                        url: $(this).attr('action'),
+                        method: 'POST',
+                        data: $(this).serialize(),
+                        success: function(response) {
+                            $('#loadingOverlay').removeClass('show');
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Registration Successful!',
+                                text: 'Your visitor pass for GITEX GLOBAL 2025 has been registered.',
+                                timer: 3000,
+                                showConfirmButton: true
+                            }).then(() => {
+                                $('#registerForm')[0].reset();
+                            });
+                        },
+                        error: function(xhr) {
+                            $('#loadingOverlay').removeClass('show');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Registration Failed',
+                                text: xhr.responseJSON?.error || 'An error occurred. Please try again.',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

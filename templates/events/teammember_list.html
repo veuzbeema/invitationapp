@@ -1,0 +1,47 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Team Members{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Team Members for {{ exhibitor.company_name }} at {{ exhibitor.event.name }}</h1>
+    <a href="{% url 'events:teammember_create' exhibitor.pk %}" class="btn btn-primary mb-3">Create New Team Member</a>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Position</th>
+                <th>Access</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for member in object_list %}
+            <tr>
+                <td>{{ member.name }}</td>
+                <td>{{ member.email }}</td>
+                <td>{{ member.phone_number }}</td>
+                <td>{{ member.position }}</td>
+                <td>
+                    {% if member.login_access %}Login{% endif %}
+                    {% if member.company_admin %}, Admin{% endif %}
+                    {% if member.lead_capture_access %}, Lead Capture{% endif %}
+                    {% if member.lead_export_access %}, Lead Export{% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'events:teammember_update' member.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                    <a href="{% url 'events:teammember_delete' member.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6">No team members found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

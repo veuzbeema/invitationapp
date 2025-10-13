@@ -1,0 +1,16 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Delete Allocation{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Delete Ticket Allocation</h1>
+    <p>Are you sure you want to delete allocation of {{ object.quantity }} {{ object.ticket_class.name }} tickets for {{ object.exhibitor.company_name }}?</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+        <a href="{% url 'events:ticket_allocation_list' object.exhibitor.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

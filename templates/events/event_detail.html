@@ -1,0 +1,112 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}{{ object.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h1 class="card-title mb-0">{{ object.name }}</h1>
+                </div>
+                <div class="card-body">
+                    {% if object.description %}
+                    <p class="card-text lead">{{ object.description }}</p>
+                    {% endif %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-item mb-3">
+                                <i class="fas fa-calendar-alt text-primary me-2"></i>
+                                <strong>Start Date:</strong> {{ object.start_date|date:"M d, Y H:i" }}
+                            </div>
+                            <div class="info-item mb-3">
+                                <i class="fas fa-calendar-alt text-primary me-2"></i>
+                                <strong>End Date:</strong> {{ object.end_date|date:"M d, Y H:i" }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-item mb-3">
+                                <i class="fas fa-map-marker-alt text-primary me-2"></i>
+                                <strong>Location:</strong> {{ object.location|default:"TBD" }}
+                            </div>
+                            <div class="info-item mb-3">
+                                <i class="fas fa-user text-primary me-2"></i>
+                                <strong>Created By:</strong> {{ object.created_by.username }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 text-muted">Quick Actions</h2>
+            </div>
+            <div class="btn-group d-flex flex-wrap gap-2">
+                <a href="{% url 'events:event_update' object.pk %}" class="btn btn-warning">
+                    <i class="fas fa-edit me-1"></i>Edit Event
+                </a>
+                <a href="{% url 'events:event_delete' object.pk %}" class="btn btn-danger">
+                    <i class="fas fa-trash me-1"></i>Delete Event
+                </a>
+                <a href="{% url 'events:event_list' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Back to List
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 text-muted">Manage Event</h2>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card h-100 border-primary">
+                        <div class="card-body text-center">
+                            <i class="fas fa-ticket-alt fa-3x text-primary mb-3"></i>
+                            <h5 class="card-title">Ticket Classes</h5>
+                            <p class="card-text text-muted">Manage ticket types, prices, and availability.</p>
+                            <a href="{% url 'events:ticketclass_list' object.pk %}" class="btn btn-primary btn-lg">
+                                View Ticket Classes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border-success">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users fa-3x text-success mb-3"></i>
+                            <h5 class="card-title">Exhibitors</h5>
+                            <p class="card-text text-muted">Add and manage exhibitor booths and details.</p>
+                            <a href="{% url 'events:exhibitor_list' object.pk %}" class="btn btn-success btn-lg">
+                                View Exhibitors
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .info-item {
+        display: flex;
+        align-items: center;
+        font-size: 1.1em;
+    }
+    .card {
+        transition: transform 0.2s;
+    }
+    .card:hover {
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}

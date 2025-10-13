@@ -1,0 +1,15 @@
+<!-- templates/components/_action_card.html -->
+<div class="col-md-4 mb-2">
+    <div class="action-card" {% if modal_id %}data-bs-toggle="modal" data-bs-target="#{{ modal_id }}"{% endif %}>
+        <div class="d-flex align-items-center">
+            <div class="action-card-icon me-3">
+                <i class="{{ icon }}"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h5>{{ title }}</h5>
+                <p class="text-muted mb-2">{{ description }}</p>
+                <button class="btn btn-sm {{ button_class }}">{{ button_icon }} {{ button_text }}</button>
+            </div>
+        </div>
+    </div>
+</div>

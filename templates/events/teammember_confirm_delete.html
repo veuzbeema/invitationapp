@@ -1,0 +1,16 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Delete {{ object.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Delete Team Member</h1>
+    <p>Are you sure you want to delete "{{ object.name }}" ({{ object.email }})?</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+        <a href="{% url 'events:teammember_list' object.exhibitor.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

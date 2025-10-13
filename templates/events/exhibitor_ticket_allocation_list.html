@@ -1,0 +1,38 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Ticket Allocations{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Ticket Allocations for {{ exhibitor.company_name }}</h1>
+    <a href="{% url 'events:ticket_allocation_create' exhibitor.pk %}" class="btn btn-primary mb-3">Create New Allocation</a>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ticket Class</th>
+                <th>Quantity</th>
+                <th>Paid</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in object_list %}
+            <tr>
+                <td>{{ allocation.ticket_class.name }}</td>
+                <td>{{ allocation.quantity }}</td>
+                <td>{% if allocation.is_paid %}Yes{% else %}No{% endif %}</td>
+                <td>
+                    <a href="{% url 'events:ticket_allocation_update' event.id allocation.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                    <a href="{% url 'events:ticket_allocation_delete' event.id allocation.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4">No allocations found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+from django.db import models
+from core.models import TimestampedModel
+from events.models import Event, TicketClass
+from enum import Enum
+
+class Invitation(TimestampedModel):
+    INVITE_TYPES = [
+        ('private_link', 'Private Link'),
+        ('personalized', 'Personalized Email'),
+        # Add bulk if needed
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='invitations')
+    title_or_name = models.CharField(max_length=255)  # Link title or full name
+
+    email = models.EmailField(blank=True, null=True)  # For personalized
+    invite_type = models.CharField(max_length=50, choices=INVITE_TYPES)
+    expiry_date = models.DateTimeField()
+    link_limit = models.PositiveIntegerField(default=1)  # Uses per link
+    registered_count = models.PositiveIntegerField(default=0)
+
+    invitation_key = models.CharField(blank=True, null=True)
+    status = models.CharField(max_length=50, default='active')  # active, expired, deactivated
+    ticket_class = models.ForeignKey(TicketClass, on_delete=models.SET_NULL, null=True, blank=True)
+    personal_message = models.TextField(blank=True, null=True)  # For personalized
+    company_name = models.CharField(max_length=255, blank=True, null=True)  # Optional company name
+
+    def __str__(self):
+        return f"Invitation for {self.title_or_name} ({self.invite_type})"
+    
+class InvitationCSVUpload(models.Model):
+    """
+    Model to store uploaded CSV files for bulk invitation generation.
+    """
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='csv_uploads')
+    file = models.FileField(upload_to='invitation_csvs/')
+    class Status(Enum):
+        PENDING = 'pending'
+        PROCESSING = 'processing'
+        SUCCESS = 'success'
+        FAILED = 'failed'
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    processed = models.BooleanField(default=False)
+    processed_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='pending')
+    error_message = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"CSV Upload for {self.event} at {self.uploaded_at}"
+    
+
+class RegisteredUser(TimestampedModel):
+    invitation = models.ForeignKey('Invitation', on_delete=models.CASCADE, related_name='registered_users')
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField(unique=True)
+    phone = models.CharField(max_length=20)
+    registration_date = models.DateTimeField(auto_now_add=True)
+
+
+    def __str__(self):
+        return f"{self.full_name} ({self.email})"

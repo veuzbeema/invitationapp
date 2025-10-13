@@ -1,0 +1,90 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}User List - GITEX GLOBAL 2025{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">User List</h4>
+                    <a href="{% url 'accounts:create_user' %}" class="btn btn-light btn-sm"><i class="fas fa-plus"></i> Create User</a>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="userTable">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>User Type</th>
+                                    <th>Phone Number</th>
+                                    <th>Specialization</th>
+                                    <th>Company</th>
+                                    <th>Position</th>
+                                    <th>Lead Capture</th>
+                                    <th>Lead Export</th>
+                                    <th>Created At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                    <tr>
+                                        <td>{{ user.username }}</td>
+                                        <td>{{ user.email }}</td>
+                                        <td>{{ user.get_user_type_display }}</td>
+                                        <td>{{ user.phone_number|default:"—" }}</td>
+                                        <td>{{ user.get_specialization_display|default:"—" }}</td>
+                                        <td>{{ user.company_name|default:"—" }}</td>
+                                        <td>{{ user.position|default:"—" }}</td>
+                                        <td>{{ user.lead_capture_access|yesno:"Yes,No" }}</td>
+                                        <td>{{ user.lead_export_access|yesno:"Yes,No" }}</td>
+                                        <td>{{ user.created_at|date:"Y-m-d H:i" }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="10" class="text-center">No users found.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        $('#userTable').DataTable({
+            pageLength: 10,
+            responsive: true,
+            order: [[1, 'asc']],
+            language: {
+                lengthMenu: "Show _MENU_ entries",
+                search: "Search:",
+                info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                paginate: {
+                    first: "First",
+                    last: "Last",
+                    next: "Next",
+                    previous: "Previous"
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

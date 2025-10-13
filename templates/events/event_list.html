@@ -1,0 +1,35 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Events List{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Events</h1>
+    <a href="{% url 'events:event_create' %}" class="btn btn-primary mb-3">Create New Event</a>
+    <div class="row">
+        {% for event in object_list %}
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ event.name }}</h5>
+                    <p class="card-text">{{ event.description|truncatewords:20 }}</p>
+                    <p class="card-text"><small class="text-muted">Start: {{ event.start_date|date:"M d, Y H:i" }}</small></p>
+                    <p class="card-text"><small class="text-muted">End: {{ event.end_date|date:"M d, Y H:i" }}</small></p>
+                    <p class="card-text"><small class="text-muted">Location: {{ event.location }}</small></p>
+                    <div class="btn-group">
+                        <a href="{% url 'events:event_detail' event.pk %}" class="btn btn-info btn-sm">View</a>
+                        <a href="{% url 'events:event_update' event.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                        <a href="{% url 'events:event_delete' event.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <p>No events found.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

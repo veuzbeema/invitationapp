@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invitation to GITEX GLOBAL 2025</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+        }
+        .invite-container {
+            max-width: 600px;
+            width: 100%;
+            padding: 2rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .invite-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .invite-header h1 {
+            font-size: 2rem;
+            color: #1a1a1a;
+        }
+        .invite-header p {
+            color: #6c757d;
+            font-size: 1rem;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            border-radius: 5px;
+            width: 100%;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .alert-error {
+            font-size: 0.9rem;
+        }
+        .personal-message {
+            font-size: 0.9rem;
+            color: #343a40;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #007bff;
+            padding-left: 1rem;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .loading-overlay.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Invitation Landing Page -->
+    <div class="invite-container">
+        <div class="invite-header">
+            <h1>You're Invited to {{ event_name }}</h1>
+            <p>Join us from 13-17 October 2025 at the world's largest tech and startup event!</p>
+        </div>
+        {% if error %}
+            <div class="alert alert-danger alert-error" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>{{ error }}
+            </div>
+        {% else %}
+            {% if personal_message %}
+                <div class="personal-message">
+                    {{ personal_message|linebreaks }}
+                </div>
+            {% endif %}
+            <p class="text-center text-muted mb-4">
+                You've been invited by <strong>{{ title_or_name }}</strong> to attend {{ event_name }}.
+                Click below to register for your visitor pass.
+            </p>
+            <form action="{% url 'invitations:invite_landing' invitation_key %}" method="POST">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-ticket-alt me-2"></i>Register Now
+                </button>
+            </form>
+        {% endif %}
+        <div class="text-center mt-3">
+            <a href="https://gitex.com" class="text-muted text-decoration-none">Back to GITEX GLOBAL Home</a>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        $(document).ready(function() {
+            $('form').on('submit', function() {
+                $('#loadingOverlay').addClass('show');
+            });
+        });
+    </script>
+</body>
+</html>

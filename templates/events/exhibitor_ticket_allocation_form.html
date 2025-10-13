@@ -1,0 +1,85 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit{% else %}Create{% endif %} Ticket Allocation{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-info text-white">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-ticket-alt me-2"></i>
+                        <h1 class="card-title mb-0">{% if form.instance.pk %}Edit{% else %}Create{% endif %} Ticket Allocation for {{ exhibitor.company_name }}</h1>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+                        {{ form.exhibitor }}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.ticket_class.id_for_label }}" class="form-label fw-bold">
+                                    <i class="fas fa-tag text-info me-1"></i>{{ form.ticket_class.label }}
+                                </label>
+                                {{ form.ticket_class }}
+                                {% if form.ticket_class.errors %}
+                                    <div class="text-danger small mt-1">{{ form.ticket_class.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.quantity.id_for_label }}" class="form-label fw-bold">
+                                    <i class="fas fa-hashtag text-info me-1"></i>{{ form.quantity.label }}
+                                </label>
+                                {{ form.quantity }}
+                                {% if form.quantity.errors %}
+                                    <div class="text-danger small mt-1">{{ form.quantity.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="{{ form.is_paid.id_for_label }}" name="{{ form.is_paid.name }}" {% if form.is_paid.value %}checked{% endif %}>
+                                    <label class="form-check-label fw-bold" for="{{ form.is_paid.id_for_label }}">
+                                        <i class="fas fa-credit-card text-info me-1"></i>{{ form.is_paid.label }}
+                                    </label>
+                                </div>
+                                {% if form.is_paid.errors %}
+                                    <div class="text-danger small mt-1">{{ form.is_paid.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Save Allocation
+                            </button>
+                            <a href="{% url 'events:ticket_allocation_list' event.id exhibitor.pk %}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-label {
+        color: #495057;
+    }
+    .card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+</style>
+{% endblock %}

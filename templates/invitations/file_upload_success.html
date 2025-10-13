@@ -1,0 +1,10 @@
+{% extends "base/base.html" %}
+
+{% block content %}
+<div class="container" style="background:#fff; padding:2rem 3rem; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.08); text-align:center; max-width:400px; margin:40px auto;">
+    <div class="success-icon" style="font-size:3rem; color:#28a745; margin-bottom:1rem;">&#10003;</div>
+    <h1 style="margin:0 0 1rem 0; color:#333;">File Uploaded Successfully!</h1>
+    <p style="color:#555; margin-bottom:2rem;">Your file has been uploaded. Thank you.</p>
+    <a href="{% url 'file_upload' %}" class="btn" style="display:inline-block; padding:0.6rem 1.5rem; background:#28a745; color:#fff; border:none; border-radius:5px; text-decoration:none; font-size:1rem; transition:background 0.2s;">Upload Another File</a>
+</div>
+{% endblock %}
