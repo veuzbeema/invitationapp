@@ -7,23 +7,29 @@ class Invitation(TimestampedModel):
     INVITE_TYPES = [
         ('private_link', 'Private Link'),
         ('personalized', 'Personalized Email'),
-        # Add bulk if needed
+    ]
+
+    STATUS_TYPES = [
+        ('active', 'Active'),
+        ('pending', 'Pending'),
+        ('expired', 'Expired'),
     ]
 
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='invitations')
-    title_or_name = models.CharField(max_length=255)  # Link title or full name
+    title_or_name = models.CharField(max_length=255, null=True, blank=True) 
 
-    email = models.EmailField(blank=True, null=True)  # For personalized
+    email = models.EmailField(blank=True, null=True) 
     invite_type = models.CharField(max_length=50, choices=INVITE_TYPES)
     expiry_date = models.DateTimeField()
-    link_limit = models.PositiveIntegerField(default=1)  # Uses per link
+    link_limit = models.PositiveIntegerField(default=1) 
+    link_count = models.PositiveIntegerField(default=1)  
     registered_count = models.PositiveIntegerField(default=0)
 
     invitation_key = models.CharField(blank=True, null=True)
-    status = models.CharField(max_length=50, default='active')  # active, expired, deactivated
+    status = models.CharField(max_length=50, default='active',choices=STATUS_TYPES)  
     ticket_class = models.ForeignKey(TicketClass, on_delete=models.SET_NULL, null=True, blank=True)
-    personal_message = models.TextField(blank=True, null=True)  # For personalized
-    company_name = models.CharField(max_length=255, blank=True, null=True)  # Optional company name
+    personal_message = models.TextField(blank=True, null=True)
+    company_name = models.CharField(max_length=255, blank=True, null=True) 
 
     def __str__(self):
         return f"Invitation for {self.title_or_name} ({self.invite_type})"

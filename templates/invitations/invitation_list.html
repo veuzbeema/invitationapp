@@ -128,7 +128,7 @@
                             <i class="fas fa-users"></i>
                         </div>
                         <div class="stat-content">
-                            <div class="stat-value" data-count="{{ registered_visitor }}">{{ registered_visitor }}</div>
+                            <div class="stat-value" data-count="{{ registered_visitors }}">{{ registered_visitors }}</div>
                             <div class="stat-label">Registered Visitors</div>
                         </div>
                     </div>
@@ -136,7 +136,7 @@
             </div>
 
             <!-- Filter Section -->
-            <!-- <div class="filter-section animate-fade-in">
+            <div class="filter-section animate-fade-in">
                 <div class="row g-2">
                     <div class="col-md-3">
                         <label class="form-label small text-muted">Keyword</label>
@@ -147,15 +147,15 @@
                         <select class="form-select form-select-sm select2" id="filterStatus" style="border: 1px solid #dee2e6;">
                             <option value="">All</option>
                             <option value="active">Active</option>
-                            <option value="pending">Pending</option>
+                            <option value="expired">Expired</option>
                         </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small text-muted">Type</label>
                         <select class="form-select form-select-sm select2" id="filterType" style="border: 1px solid #dee2e6;">
-                            <option value="">All</option>
-                            <option value="link">Link</option>
-                            <option value="personal">Personal</option>
+                            <option value="">All</option>  
+                            <option value="link">Private Link</option>
+                            <option value="personalized">Personalized Link</option>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -174,7 +174,7 @@
                         </button>
                     </div>
                 </div>
-            </div> -->
+            </div>
 
             <!-- Table Section -->
             <div class="table-wrapper animate-fade-in">
@@ -264,6 +264,20 @@
                             <input type="text" class="form-control" id="linkTitle" required>
                             <small class="text-muted">Give your invitation link a descriptive title</small>
                         </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Ticket Type <span class="text-danger">*</span></label>
+                                <select class="form-select select2-modal" id="linkTicketType" required>
+                                    <option value="">Select Ticket Type</option>
+                                    <option value="visitor">Visitor</option>
+                                    <option value="vip">VIP</option>
+                                    <option value="gold">Gold</option>
+                                    <option value="platinum">Platinum</option>
+                                    <option value="exhibitor">Exhibitor</option>
+                            </select>
+                        </div>
+
+                        
                         <div class="mb-3">
                             <label class="form-label">Expire Date <span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="expireDate" required>
@@ -302,10 +316,10 @@
                 </div>
                 <div class="modal-body">
                     <form id="personalizedForm">
-                        <div class="mb-3">
-                            <label class="form-label">Guest Full Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="guestName" required>
-                        </div>
+                    <div class="mb-3">
+                        <label class="form-label">Guest Full Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="guestName" required pattern="[A-Za-z\s\-\']{2,255}" title="Name can only contain letters, spaces, hyphens, or apostrophes (2-255 characters)">
+                    </div>
                         <div class="mb-3">
                             <label class="form-label">Guest Email Address <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" id="guestEmail" required>
@@ -417,6 +431,8 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <!-- Pagination Controls -->
+                            <div id="paginationControls"></div>
                             <div class="mt-2">
                                 <span class="badge bg-success" id="validRowsCount">0 Valid</span>
                                 <span class="badge bg-danger" id="invalidRowsCount">0 Invalid</span>
@@ -509,6 +525,7 @@
 
 
 {% block extra_scripts %} 
+{{ invitation_base_url|json_script:"invitationBaseUrl" }}
  <script>
         document.addEventListener('DOMContentLoaded', function() {
             var today = new Date().toISOString().split('T')[0];
@@ -542,56 +559,16 @@
                 $('#bulkCsvFile').val('');
             });
 
-            // CSV File Upload Handler
+            // Add this inside your $(document).ready(function() { ... });
+
+            // CSV File Upload Handler with Pagination
             let csvData = [];
-            $('#bulkCsvFile').on('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                        Swal.fire('Error', 'File size exceeds 5MB limit', 'error');
-                        $(this).val('');
-                        return;
-                    }
+            let currentPage = 1;
+            const rowsPerPage = 50; // Show 50 rows at a time
 
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const text = e.target.result;
-                        parseCSV(text);
-                    };
-                    reader.readAsText(file);
-                }
-            });
-
-            // Parse CSV and show preview
-            function parseCSV(text) {
-                const lines = text.split('\n');
-                const headers = lines[0].split(',').map(h => h.trim());
-                csvData = [];
-                
-                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
-                let validCount = 0;
-                let invalidCount = 0;
-
-                $('#csvPreviewBody').empty();
-
-                for (let i = 1; i < lines.length; i++) {
-                    if (!lines[i].trim()) continue;
-
-                    const values = lines[i].split(',').map(v => v.trim());
-                    const row = {
-                        index: i,
-                        name: values[0] || '',
-                        email: values[1] || '',
-                        ticketType: values[2] ? values[2].toLowerCase() : '',
-                        company: values[3] || '',
-                        message: values[4] || ''
-                    };
-
-                    csvData.push(row);
-                    addPreviewRow(row, validTicketTypes);
-                }
-
-                updateValidationCounts();
+            // Validate email helper function
+            function validateEmail(email) {
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
             }
 
             // Add preview row with editable ticket type and delete button
@@ -665,6 +642,166 @@
                 }
             }
 
+            // Update pagination controls
+            function updatePaginationControls() {
+                const totalPages = Math.ceil(csvData.length / rowsPerPage) || 1;
+                
+                let paginationHtml = `
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div>
+                            Showing ${csvData.length > 0 ? ((currentPage - 1) * rowsPerPage) + 1 : 0} to ${Math.min(currentPage * rowsPerPage, csvData.length)} of ${csvData.length} rows
+                        </div>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-sm btn-outline-primary" id="firstPageBtn" ${currentPage === 1 ? 'disabled' : ''}>
+                                <i class="fas fa-angle-double-left"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" id="prevPageBtn" ${currentPage === 1 ? 'disabled' : ''}>
+                                <i class="fas fa-angle-left"></i> Prev
+                            </button>
+                            <button class="btn btn-sm btn-primary" disabled>
+                                Page ${currentPage} of ${totalPages}
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" id="nextPageBtn" ${currentPage === totalPages ? 'disabled' : ''}>
+                                Next <i class="fas fa-angle-right"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" id="lastPageBtn" ${currentPage === totalPages ? 'disabled' : ''}>
+                                <i class="fas fa-angle-double-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                $('#paginationControls').html(paginationHtml);
+            }
+
+            // Render paginated preview
+            function renderPreviewPage() {
+                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
+                const startIndex = (currentPage - 1) * rowsPerPage;
+                const endIndex = Math.min(startIndex + rowsPerPage, csvData.length);
+                
+                $('#csvPreviewBody').empty();
+                
+                for (let i = startIndex; i < endIndex; i++) {
+                    addPreviewRow(csvData[i], validTicketTypes);
+                }
+                
+                updatePaginationControls();
+            }
+
+            // Parse CSV with chunked processing
+            function parseCSV(text) {
+                const lines = text.split('\n');
+                const headers = lines[0].split(',').map(h => h.trim());
+                csvData = [];
+                currentPage = 1;
+
+                // Process rows in chunks to avoid blocking UI
+                let rowIndex = 1;
+                const chunkSize = 1000;
+                
+                function processChunk() {
+                    const endIndex = Math.min(rowIndex + chunkSize, lines.length);
+                    
+                    for (let i = rowIndex; i < endIndex; i++) {
+                        if (!lines[i].trim()) continue;
+
+                        const values = lines[i].split(',').map(v => v.trim());
+                        const row = {
+                            index: i,
+                            name: values[0] || '',
+                            email: values[1] || '',
+                            ticketType: values[2] ? values[2].toLowerCase() : '',
+                            company: values[3] || '',
+                            message: values[4] || ''
+                        };
+
+                        csvData.push(row);
+                    }
+                    
+                    rowIndex = endIndex;
+                    
+                    // Update progress
+                    const progress = Math.round((rowIndex / lines.length) * 100);
+                    Swal.update({
+                        html: `Processing: ${progress}% (${csvData.length} rows)`
+                    });
+                    
+                    if (rowIndex < lines.length) {
+                        // Process next chunk
+                        setTimeout(processChunk, 0);
+                    } else {
+                        // Done processing
+                        Swal.close();
+                        renderPreviewPage();
+                        updateValidationCounts();
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'CSV Loaded',
+                            text: `Successfully loaded ${csvData.length} rows`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    }
+                }
+                
+                processChunk();
+            }
+
+            // Validate and update row appearance
+            function validateAndUpdateRow(index) {
+                const rowData = csvData.find(r => r.index === index);
+                if (!rowData) return;
+
+                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
+                const hasValidTicketType = validTicketTypes.includes(rowData.ticketType);
+                const hasValidEmail = rowData.email && validateEmail(rowData.email);
+                const isValid = rowData.name && hasValidEmail && hasValidTicketType;
+
+                const $row = $(`tr[data-index="${index}"]`);
+                if ($row.length) {
+                    if (isValid) {
+                        $row.removeClass('table-danger');
+                        $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
+                    } else {
+                        $row.addClass('table-danger');
+                        $row.find('td:eq(5)').html('<span class="badge bg-danger">Invalid</span>');
+                    }
+                }
+
+                updateValidationCounts();
+            }
+
+            // FILE UPLOAD EVENT
+            $('#bulkCsvFile').on('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        Swal.fire('Error', 'File size exceeds 5MB limit', 'error');
+                        $(this).val('');
+                        return;
+                    }
+
+                    // Show loading indicator
+                    Swal.fire({
+                        title: 'Processing CSV...',
+                        html: 'Please wait while we parse your file',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const text = e.target.result;
+                        parseCSV(text);
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
             // Handle ticket type change
             $(document).on('change', '.ticket-type-select', function() {
                 const index = $(this).data('index');
@@ -694,28 +831,6 @@
                 validateAndUpdateRow(index);
             });
 
-            // Validate and update row appearance
-            function validateAndUpdateRow(index) {
-                const rowData = csvData.find(r => r.index === index);
-                if (!rowData) return;
-
-                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
-                const hasValidTicketType = validTicketTypes.includes(rowData.ticketType);
-                const hasValidEmail = rowData.email && validateEmail(rowData.email);
-                const isValid = rowData.name && hasValidEmail && hasValidTicketType;
-
-                const $row = $(`tr[data-index="${index}"]`);
-                if (isValid) {
-                    $row.removeClass('table-danger');
-                    $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
-                } else {
-                    $row.addClass('table-danger');
-                    $row.find('td:eq(5)').html('<span class="badge bg-danger">Invalid</span>');
-                }
-
-                updateValidationCounts();
-            }
-
             // Handle row deletion
             $(document).on('click', '.delete-row-btn', function() {
                 const index = $(this).data('index');
@@ -723,10 +838,13 @@
                 // Remove from csvData
                 csvData = csvData.filter(r => r.index !== index);
                 
-                // Remove row from table
-                $(`tr[data-index="${index}"]`).remove();
+                // Re-render current page
+                const totalPages = Math.ceil(csvData.length / rowsPerPage);
+                if (currentPage > totalPages && totalPages > 0) {
+                    currentPage = totalPages;
+                }
                 
-                // Update counts
+                renderPreviewPage();
                 updateValidationCounts();
 
                 // If no rows left, hide preview and disable button
@@ -734,6 +852,32 @@
                     $('#csvPreviewSection').hide();
                     $('#sendBulkInviteBtn').prop('disabled', true);
                 }
+            });
+
+            // Pagination button handlers
+            $(document).on('click', '#firstPageBtn', function() {
+                currentPage = 1;
+                renderPreviewPage();
+            });
+
+            $(document).on('click', '#prevPageBtn', function() {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderPreviewPage();
+                }
+            });
+
+            $(document).on('click', '#nextPageBtn', function() {
+                const totalPages = Math.ceil(csvData.length / rowsPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderPreviewPage();
+                }
+            });
+
+            $(document).on('click', '#lastPageBtn', function() {
+                currentPage = Math.ceil(csvData.length / rowsPerPage);
+                renderPreviewPage();
             });
 
             // Clear all preview
@@ -748,6 +892,7 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         csvData = [];
+                        currentPage = 1;
                         $('#csvPreviewBody').empty();
                         $('#csvPreviewSection').hide();
                         $('#sendBulkInviteBtn').prop('disabled', true);
@@ -756,7 +901,7 @@
                 });
             });
 
-            // Add manual row button - FIXED
+            // Add manual row button
             $(document).on('click', '#addManualRowBtn', function() {
                 // Show preview section if hidden
                 if (!$('#csvPreviewSection').is(':visible')) {
@@ -778,9 +923,9 @@
 
                 csvData.push(newRow);
 
-                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
-                addPreviewRow(newRow, validTicketTypes);
-
+                // Go to last page where new row will be
+                currentPage = Math.ceil(csvData.length / rowsPerPage);
+                renderPreviewPage();
                 updateValidationCounts();
 
                 // Scroll to the new row and focus
@@ -800,10 +945,6 @@
                     showConfirmButton: false
                 });
             });
-
-            function validateEmail(email) {
-                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-            }
 
             // Download CSV Template
             $('#downloadTemplateBtn').on('click', function() {
@@ -838,11 +979,24 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         const formData = new FormData();
+                        const maxFileSizeMB = 1; // Set the threshold to 1 MB
+                        const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024; // Convert MB to bytes
                         // Since JS parses CSV, but to send file, get the file
                         const fileInput = $('#bulkCsvFile')[0];
                         if (fileInput.files[0]) {
+                            const fileSize = fileInput.files[0].size; // File size in bytes
                             formData.append('bulkCsvFile', fileInput.files[0]);
+
+                            // Check if file size exceeds the threshold
+                            if (fileSize > maxFileSizeBytes) {
+                                formData.append('isLargeFile', 'true'); // Append flag for large file
+                            } else {
+                                formData.append('isLargeFile', 'false'); // Append flag for small file
+                            }
                         }
+
+                        
+
                         formData.append('bulkPersonalMessage', $('#bulkPersonalMessage').val());
                         formData.append('bulkExpireDate', $('#bulkExpireDate').val());
                         
@@ -873,8 +1027,10 @@
                                     Swal.fire('Error', response.error, 'error');
                                 }
                             },
-                            error: function() {
-                                Swal.fire('Error', 'Failed to send bulk invitations', 'error');
+                            error: function(res) {
+                                // Access the error message from responseJSON
+                                const errorMessage = res.responseJSON && res.responseJSON.error ? res.responseJSON.error : 'An unknown error occurred';
+                                Swal.fire('Error', `Failed to send bulk invitations: ${errorMessage}`, 'error');
                             }
                         });
                     }
@@ -928,21 +1084,36 @@
                             return '<button class="btn btn-sm btn-primary copy-link"><i class="fas fa-copy me-1"></i>Copy Link</button>';
                         }
                     },
+                  {
+                    data: 'status',
+                    render: function(data) {
+                        const statusClass = data === 'Active' ? 'success' : 
+                                        data === 'Expired' ? 'danger' : 'secondary';
+                        return `<span class="badge bg-${statusClass}">${data}</span>`;
+                    }
+                },
                     {
-                        data: 'status',
+                        data: 'type',
                         render: function(data) {
-                            const statusClass = data === 'Active' ? 'success' : data === 'Pending' ? 'warning' : 'secondary';
-                            return `<span class="badge bg-${statusClass}">${data}</span>`;
-                        }
-                    },
-                    {
-                        data: null,
-                        render: function() {
-                            return `
-                                <button class="btn btn-action btn-sm btn-info" title="View"><i class="fas fa-eye"></i></button>
-                                <button class="btn btn-action btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></button>
-                                <button class="btn btn-action btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
-                            `;
+
+                            if (data === 'personalized') {
+
+                                 return `
+                                    <button class="btn btn-action btn-sm btn-info" title="View"><i class="fas fa-eye"></i></button>
+                                    <button class="btn btn-action btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></button>
+
+                                    <button class="btn btn-action btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+                                `;
+
+                            } else {
+                                return `
+                                    <button class="btn btn-action btn-sm btn-info" title="View"><i class="fas fa-eye"></i></button>
+                                    <button class="btn btn-action btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></button>
+                                    <button class="btn btn-action btn-sm btn-success" title="Broadcast"><i class="fas fa-broadcast-tower"></i></button>
+                                    <button class="btn btn-action btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+                                `;
+                            }
+                               
                         }
                     }
                 ],
@@ -973,7 +1144,7 @@
                         expiry: '17th Oct 2025',
                         limit: Math.floor(Math.random() * 10) + 1,
                         registered: Math.floor(Math.random() * 5),
-                        status: ['Active', 'Pending', 'Expired'][Math.floor(Math.random() * 3)]
+                        status: ['Active', 'Expired'][Math.floor(Math.random() * 3)]
                     });
                 }
                 return data;
@@ -1045,11 +1216,33 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         showLoading();
-                        setTimeout(() => {
-                            hideLoading();
-                            Swal.fire('Sent!', `${selectedRows.size} invitations have been sent.`, 'success');
-                            $('#clearSelectionBtn').click();
-                        }, 1500);
+                        const formData = {
+                            SelectedIds: Array.from(selectedRows),
+                        };
+
+                        console.log('Activating IDs:', formData.SelectedIds);
+        
+                        $.ajax({
+                            url: `/send-bulk-invites/`,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(formData),
+                            headers: {
+                                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            success: function(response) {
+                                 Swal.fire('Activated!', `${selectedRows.size} invites send.`, 'success');
+                                 $('#clearSelectionBtn').click();
+                                 hideLoading();
+                            },
+                            error: function(res) {
+                                const errorMessage = res.responseJSON && res.responseJSON.error 
+                                    ? res.responseJSON.error 
+                                    : 'Failed to update Activate status for selected items.';
+                                Swal.fire('Error', errorMessage, 'error');
+                            }
+                        });;
                     }
                 });
             });
@@ -1063,8 +1256,37 @@
                     confirmButtonText: 'Activate'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        Swal.fire('Activated!', `${selectedRows.size} items have been activated.`, 'success');
-                        $('#clearSelectionBtn').click();
+
+                        const formData = {
+                            SelectedIds: Array.from(selectedRows),
+                        };
+
+                        console.log('Activating IDs:', formData.SelectedIds);
+        
+                        $.ajax({
+                            url: `/bulk-activate/`,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(formData),
+                            headers: {
+                                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            success: function(response) {
+                                 Swal.fire('Activated!', `${selectedRows.size} items have been activated.`, 'success');
+                                 $('#clearSelectionBtn').click();
+                                 hideLoading();
+                            },
+                            error: function(res) {
+                                const errorMessage = res.responseJSON && res.responseJSON.error 
+                                    ? res.responseJSON.error 
+                                    : 'Failed to send invites for selected items.';
+                                Swal.fire('Error', errorMessage, 'error');
+                            }
+                        });
+
+
+                      
                     }
                 });
             });
@@ -1078,8 +1300,35 @@
                     confirmButtonText: 'Deactivate'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        Swal.fire('Deactivated!', `${selectedRows.size} items have been deactivated.`, 'success');
-                        $('#clearSelectionBtn').click();
+                        const formData = {
+                            SelectedIds: Array.from(selectedRows),
+                        };
+
+                        console.log('Activating IDs:', formData.SelectedIds);
+        
+                        $.ajax({
+                            url: `/bulk-deactivate/`,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(formData),
+                            headers: {
+                                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            success: function(response) {
+                                 Swal.fire('Deactivated!', `${selectedRows.size} items have been deactivated.`, 'success');
+                                 $('#clearSelectionBtn').click();
+                                 hideLoading();
+                            },
+                            error: function(res) {
+                                const errorMessage = res.responseJSON && res.responseJSON.error 
+                                    ? res.responseJSON.error 
+                                    : 'Failed to update De-Activate status for selected items.';
+                                Swal.fire('Error', errorMessage, 'error');
+                            }
+                        });
+
+                        
                     }
                 });
             });
@@ -1103,15 +1352,35 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         showLoading();
-                        setTimeout(() => {
-                            hideLoading();
-                            Swal.fire('Deleted!', `${selectedRows.size} items have been deleted.`, 'success');
-                            selectedRows.forEach(rowId => {
-                                table.row(rowId).remove();
-                            });
-                            table.draw();
-                            $('#clearSelectionBtn').click();
-                        }, 1000);
+                
+                        const formData = {
+                            SelectedIds: Array.from(selectedRows),
+                        };
+
+                        console.log('Activating IDs:', formData.SelectedIds);
+        
+                        $.ajax({
+                            url: `/bulk-delete/`,
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(formData),
+                            headers: {
+                                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            success: function(response) {
+                                hideLoading();
+                                Swal.fire('Deleted!', `${selectedRows.size} items have been deleted.`, 'success');
+                                $('#clearSelectionBtn').click();
+                            },
+                            error: function(res) {
+                                const errorMessage = res.responseJSON && res.responseJSON.error 
+                                    ? res.responseJSON.error 
+                                    : 'Failed to Delete for selected items.';
+                                Swal.fire('Error', errorMessage, 'error');
+                            }
+                        });
+         
                     }
                 });
             });
@@ -1126,57 +1395,108 @@
                 $(this).addClass('active');
             });
 
-            function updateCountdown() {
-                const countdown = $('#countdown');
-                let days = 16, hours = 17, minutes = 45, seconds = 19;
-                
-                setInterval(function() {
-                    seconds--;
-                    if (seconds < 0) {
-                        seconds = 59;
-                        minutes--;
-                        if (minutes < 0) {
-                            minutes = 59;
-                            hours--;
-                            if (hours < 0) {
-                                hours = 23;
-                                days--;
-                            }
-                        }
+              // ⏱️ Countdown Timer (unchanged)
+    function updateCountdown() {
+        const countdown = $('#countdown');
+        let days = 16, hours = 17, minutes = 45, seconds = 19;
+        
+        setInterval(function() {
+            seconds--;
+            if (seconds < 0) {
+                seconds = 59;
+                minutes--;
+                if (minutes < 0) {
+                    minutes = 59;
+                    hours--;
+                    if (hours < 0) {
+                        hours = 23;
+                        days--;
                     }
-                    
-                    countdown.html(`
-                        <span>${days}<small>Days</small></span>
-                        <span>${hours}<small>Hours</small></span>
-                        <span>${minutes}<small>Mins</small></span>
-                        <span>${seconds}<small>Secs</small></span>
-                    `);
-                }, 1000);
+                }
             }
-            updateCountdown();
+            
+            countdown.html(`
+                <span>${days}<small>Days</small></span>
+                <span>${hours}<small>Hours</small></span>
+                <span>${minutes}<small>Mins</small></span>
+                <span>${seconds}<small>Secs</small></span>
+            `);
+        }, 1000);
+    }
+    updateCountdown();
 
-            $('.stat-value').each(function() {
-                const $this = $(this);
-                
-                const countTo = parseInt($this.attr('data-count'), 10) || 0;
-                $({ countNum: 0 }).animate({
-                    countNum: countTo
-                }, {
-                    duration: 1500,
-                    easing: 'swing',
-                    step: function() {
-                        $this.text(Math.floor(this.countNum));
-                    },
-                    complete: function() {
-                        $this.text(this.countNum);
-                    }
-                });
-            });
+
+    // 🟡 Reusable counter animation function ✅ NEW
+    function animateCounter($el, newCount) {
+        // Update data-count attribute to new value
+        $el.attr('data-count', newCount);
+
+        // Animate from 0 to newCount
+        $({ countNum: 0 }).animate({ countNum: newCount }, {
+            duration: 1500,
+            easing: 'swing',
+            step: function() {
+                $el.text(Math.floor(this.countNum));
+            },
+            complete: function() {
+                $el.text(this.countNum);
+            }
+        });
+    }
+
+    // // 🚀 Initial animation for all stat values (on page load)
+    $('.stat-value').each(function() {
+        const $this = $(this);
+        const countTo = parseInt($this.attr('data-count'), 10) || 0;
+        
+        // Show the value immediately
+        $this.text(countTo);
+        
+        // Optional: Animate from 0 for visual effect
+        $({ countNum: 0 }).animate({ countNum: countTo }, {
+            duration: 1500,
+            easing: 'swing',
+            step: function() {
+                $this.text(Math.floor(this.countNum));
+            },
+            complete: function() {
+                $this.text(countTo);
+            }
+        });
+    });
+
+    // 🌐 Example: Refresh table and update registered visitors count dynamically
+    $('#refreshTable').on('click', function() {
+        $.ajax({
+            url: "{% url 'invitations:invitation_list' %}",  // make sure this is the correct URL for your AJAX view
+            type: "GET",
+            dataType: "json",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            success: function(response) {
+                // ✅ Update DataTables or table rows here as needed...
+                // For example:
+                // table.clear().rows.add(response.data).draw();
+
+                // ✅ If your Django view returns 'registered_visitors', update it dynamically
+                if (response.registered_visitors !== undefined) {
+                    const $registered = $('#registeredVisitorsCount');
+                    animateCounter($registered, parseInt(response.registered_visitors, 10) || 0);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Failed to refresh invitations:", error);
+            }
+        });
+    });
 
             $(document).on('click', '.copy-link', function() {
                 const rowData = table.row($(this).parents('tr')).data();
                 const invitationKey = rowData.key;
-                navigator.clipboard.writeText(`https://gitex.com/invite/${invitationKey}`);
+                // const invitationBaseUrl = JSON.parse(document.getElementById('invitationBaseUrl').textContent);
+                const invitationBaseUrl = 'http://localhost:8000/'
+                navigator.clipboard.writeText(`${invitationBaseUrl}invite/${invitationKey}`);
                 const btn = $(this);
                 const originalHtml = btn.html();
                 btn.html('<i class="fas fa-check me-1"></i>Copied!').addClass('btn-success').removeClass('btn-primary');
@@ -1201,6 +1521,56 @@
                 }, 500);
             });
 
+             $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                // Get filter values
+                const filterStatus = $('#filterStatus').val().toLowerCase();
+                const filterType = $('#filterType').val().toLowerCase();
+                const filterDate = $('#filterDate').val();
+                
+                // Get row data
+                const rowStatus = data[8].toLowerCase(); // Status column (raw status, e.g., 'Pending' -> 'pending')
+                const rowType = data[3].toLowerCase();
+                const rowExpiry = data[4]; // Expiry column
+                
+                // Status filter
+               if (filterStatus && rowStatus !== filterStatus) {
+                    return false;
+                }
+                
+                // Type filter
+                if (filterType) {
+                    if (filterType === 'link' && !rowType.includes('invitation link')) {
+                        return false;
+                    }
+                    if (filterType === 'personal' && !rowType.includes('personal')) {
+                        return false;
+                    }
+                }
+                
+                // Date filter
+                if (filterDate && rowExpiry !== 'N/A') {
+                    // Parse the date from format like "17th Oct 2025"
+                    const rowDate = new Date(rowExpiry);
+                    const selectedDate = new Date(filterDate);
+                    
+                    // Compare dates (ignore time)
+                    if (rowDate.toDateString() !== selectedDate.toDateString()) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+
+            // Apply filters on change
+            $('#filterStatus, #filterType, #filterDate').on('change', function() {
+                table.draw();
+            });
+
+            $('#searchKeyword').on('input', function() {
+                table.search($(this).val()).draw();
+            });
+
             $('#resetBtn').click(function() {
                 $('#searchKeyword').val('');
                 $('#filterStatus').val('').trigger('change');
@@ -1209,7 +1579,7 @@
                 table.search('').draw();
             });
 
-            $('#exportBtn').click(function() {
+           $('#exportBtn').click(function() {
                 Swal.fire({
                     title: 'Export Data',
                     text: 'Select export format',
@@ -1221,54 +1591,217 @@
                     denyButtonText: 'PDF'
                 }).then((result) => {
                     if (result.isConfirmed || result.isDenied || result.dismiss === Swal.DismissReason.cancel) {
-                        showLoading();
-                        setTimeout(() => {
-                            hideLoading();
-                            Swal.fire('Exported!', 'Your file has been downloaded.', 'success');
-                        }, 1000);
+                        const format = result.isConfirmed ? 'excel' : result.isDenied ? 'pdf' : 'csv';
+                        
+                        // Show loading
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Exporting...',
+                            text: `Preparing ${format.toUpperCase()} file`,
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+                        
+                        // Get current filters
+                        const keyword = $('#searchKeyword').val();
+                        const status = $('#filterStatus').val();
+                        const type = $('#filterType').val();
+                        const date = $('#filterDate').val();
+                        
+                        // Build export URL with query parameters
+                        const params = new URLSearchParams({
+                            format: format,
+                            keyword: keyword || '',
+                            status: status || '',
+                            type: type || '',
+                            date: date || ''
+                        });
+                        
+                        const exportUrl = `{% url 'invitations:export_invitations' %}?${params.toString()}`;
+                        
+                        // Method 1: Direct download via iframe (works for all formats)
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = exportUrl;
+                        document.body.appendChild(iframe);
+                        
+                        // Remove iframe after download starts
+                        // setTimeout(() => {
+                        //     document.body.removeChild(iframe);
+                        //     Swal.fire({
+                        //         icon: 'success',
+                        //         title: 'Download Started!',
+                        //         text: `Your ${format.toUpperCase()} file is downloading`,
+                        //         timer: 2000,
+                        //         showConfirmButton: false
+                        //     });
+                        // }, 1000);
+                        
+                     
+                        fetch(exportUrl)
+                            .then(response => {
+                                if (!response.ok) throw new Error('Export failed');
+                                return response.blob();
+                            })
+                            .then(blob => {
+                                // Create download link
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `invitations_${new Date().getTime()}.${format === 'excel' ? 'xlsx' : format}`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                                
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Downloaded!',
+                                    text: `Your ${format.toUpperCase()} file has been downloaded`,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+                            })
+                            .catch(error => {
+                                Swal.fire('Error', 'Failed to export file', 'error');
+                            });
+                        
                     }
                 });
             });
 
             $('#submitLinkBtn').click(function() {
-                if ($('#generateLinkForm')[0].checkValidity()) {
-                    showLoading();
-                    setTimeout(() => {
-                        hideLoading();
-                        $('#generateLinkModal').modal('hide');
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Link Generated!',
-                            html: `
-                                <p>Your invitation link has been created:</p>
-                                <div class="input-group mt-3">
-                                    <input type="text" class="form-control" value="https://gitex.com/invite/XYZ789" readonly>
-                                    <button class="btn btn-primary" onclick="navigator.clipboard.writeText('https://gitex.com/invite/XYZ789')">
+    if ($('#generateLinkForm')[0].checkValidity()) {
+        const selectedDate = $('#expireDate').val();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (new Date(selectedDate) < today) {
+            console.log('Invalid date');
+            Swal.fire('Invalid Date', "You can't choose an expired date.", 'error');
+            return;
+        }
+
+        const formData = {
+            linkTitle: $('#linkTitle').val(),
+            linkLimit: $('#linkLimit').val(),
+            linkCount: $('#linkCount').val(),
+            TicketType: $('#linkTicketType').val().toLowerCase(),
+            expireDate: $('#expireDate').val()
+        };
+        
+        $.ajax({
+            url: '{% url "invitations:send_private_invitation" %}',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#generateLinkModal').modal('hide');
+                    
+                    // Build HTML for multiple links
+                    let linksHtml = '<div class="links-container" style="max-height: 400px; overflow-y: auto;">';
+                    
+                    response.links.forEach((link, index) => {
+                        linksHtml += `
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Link ${index + 1}:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control link-input" value="${link.url}" readonly>
+                                    <button class="btn btn-primary copy-btn" data-link="${link.url}">
                                         <i class="fas fa-copy"></i>
                                     </button>
                                 </div>
-                            `,
-                            confirmButtonText: 'Done'
-                        });
-                        $('#generateLinkForm')[0].reset();
-                    }, 1000);
+                            </div>
+                        `;
+                    });
+                    
+                    linksHtml += '</div>';
+                    
+                    // Add "Copy All" button if multiple links
+                    if (response.links.length > 1) {
+                        const allLinks = response.links.map(l => l.url).join('\n');
+                        linksHtml += `
+                            <div class="mt-3">
+                                <button class="btn btn-success w-100" id="copyAllLinks" data-links="${allLinks.replace(/"/g, '&quot;')}">
+                                    <i class="fas fa-copy me-2"></i>Copy All Links
+                                </button>
+                            </div>
+                        `;
+                    }
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Links Generated!',
+                        html: `
+                            <p class="mb-3">${response.total_count} invitation link(s) have been created:</p>
+                            ${linksHtml}
+                        `,
+                        width: '600px',
+                        confirmButtonText: 'Done',
+                        didOpen: () => {
+                            // Handle individual copy buttons
+                            document.querySelectorAll('.copy-btn').forEach(btn => {
+                                btn.addEventListener('click', function() {
+                                    const link = this.getAttribute('data-link');
+                                    navigator.clipboard.writeText(link).then(() => {
+                                        const icon = this.querySelector('i');
+                                        icon.className = 'fas fa-check';
+                                        setTimeout(() => {
+                                            icon.className = 'fas fa-copy';
+                                        }, 2000);
+                                    });
+                                });
+                            });
+                            
+                            // Handle copy all button
+                            const copyAllBtn = document.getElementById('copyAllLinks');
+                            if (copyAllBtn) {
+                                copyAllBtn.addEventListener('click', function() {
+                                    const links = this.getAttribute('data-links').replace(/&quot;/g, '"');
+                                    navigator.clipboard.writeText(links).then(() => {
+                                        this.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
+                                        setTimeout(() => {
+                                            this.innerHTML = '<i class="fas fa-copy me-2"></i>Copy All Links';
+                                        }, 2000);
+                                    });
+                                });
+                            }
+                        }
+                    }).then(() => {
+                        location.reload();
+                    });
+                    
+                    $('#generateLinkForm')[0].reset();
                 } else {
-                    $('#generateLinkForm')[0].reportValidity();
+                    const errorMessage = response.error || 'An unknown error occurred';
+                    Swal.fire('Error', errorMessage, 'error');
                 }
-            });
+            },
+            error: function(res) {
+                const errorMessage = res.responseJSON && res.responseJSON.error ? res.responseJSON.error : 'An unknown error occurred';
+                Swal.fire('Error', errorMessage, 'error');
+            }
+        });
+    } else {
+        $('#generateLinkForm')[0].reportValidity();
+    }
+});
+
+
+       
 
             // Send Single Personalized Invitation - AJAX
         $('#sendInviteBtn').click(function() {
             if ($('#personalizedForm')[0].checkValidity()) {
                 const personalExpireDate = $('#personalExpireDate').val();
                 const today = new Date();
-                const selectedDate = new Date(personalExpireDate);
-
-                if (selectedDate < new Date(today.toDateString())) {
-                    console.log('Invalid date');
-                    Swal.fire('Invalid Date', "You can't choose an expired date.", 'error');
-                    return;
-                }
+          
                 const formData = {
                     guestName: $('#guestName').val(),
                     guestEmail: $('#guestEmail').val(),
@@ -1299,11 +1832,15 @@
                             // Refresh table if needed
                             location.reload();  // Or ajax reload table
                         } else {
-                            Swal.fire('Error', response.error, 'error');
+                            // Swal.fire('Error', response.error, 'error');
+                            const errorMessage = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : 'An unknown error occurred';
+                            Swal.fire('Error', errorMessage, 'error');
                         }
                     },
-                    error: function() {
-                        Swal.fire('Error', 'Failed to send invitation', 'error');
+                    error: function(response) {
+                        const errorMessage = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : 'An unknown error occurred';
+                        Swal.fire('Error', errorMessage, 'error');
+                        // Swal.fire('Error', 'Failed to send invitation', 'error');
                     }
                 });
             } else {
@@ -1322,19 +1859,214 @@
             $(document).on('click', '.btn-action', function() {
                 const action = $(this).attr('title');
                 const row = table.row($(this).parents('tr')).data();
+
+                console.log('Action:', action, 'Row Data:', row);
                 
                 switch(action) {
                     case 'View':
-                        Swal.fire('View Details', `Viewing details for: ${row.name}`, 'info');
+                        $.ajax({
+                            url: `/invitations/${row.id}/view/`,
+                            method: 'GET',
+                            success: function(data) {
+                                Swal.fire('View Details', 
+                                    `Name: ${data.title_or_name}<br>
+                                    Email: ${data.email}<br>
+                                    Type: ${data.invite_type}<br>
+                                    Status: ${data.status}<br>
+                                    Expiry: ${data.expiry_date}<br>
+                                    Company: ${data.company_name}<br>
+                                    Message: ${data.personal_message}`,
+                                    'info');
+                            }
+                        });
                         break;
-                    case 'Edit':
-                        Swal.fire('Edit Record', `Editing: ${row.name}`, 'info');
+                   case 'Edit':
+                        // First, fetch the invitation data to ensure we have the latest info
+                        $.ajax({
+                            url: `/invitations/${row.id}/get/`,
+                            method: 'GET',
+                            success: function(response) {
+                                if (response.success) {
+                                    const invitation = response.data;
+                                    
+                                    Swal.fire({
+                                        title: 'Edit Invitation',
+                                        html: `
+                                            <div class="swal2-form-container">
+                                                <input id="swal_title_or_name" class="swal2-input" placeholder="Title/Name" value="${invitation.title_or_name || ''}">
+                                                <input id="swal_email" class="swal2-input" placeholder="Email" value="${invitation.email || ''}" readonly>
+                                                <select id="swal_ticket_type" class="swal2-input">
+                                                    <option value="">Select Ticket Type</option>
+                                                    <option value="visitor" ${invitation.ticket_type === 'visitor' ? 'selected' : ''}>Visitor</option>
+                                                    <option value="vip" ${invitation.ticket_type === 'vip' ? 'selected' : ''}>VIP</option>
+                                                    <option value="gold" ${invitation.ticket_type === 'gold' ? 'selected' : ''}>Gold</option>
+                                                    <option value="platinum" ${invitation.ticket_type === 'platinum' ? 'selected' : ''}>Platinum</option>
+                                                    <option value="exhibitor" ${invitation.ticket_type === 'exhibitor' ? 'selected' : ''}>Exhibitor</option>
+                                                </select>
+                                                <select id="swal_status" class="swal2-input">
+                                                    <option value="active" ${invitation.status === 'active' ? 'selected' : ''}>Active</option>
+                                                    <option value="pending" ${invitation.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                                    <option value="expired" ${invitation.status === 'expired' ? 'selected' : ''}>Expired</option>
+                                                </select>
+                                                <input id="swal_expiry_date" type="date" class="swal2-input" value="${invitation.expiry_date || ''}">
+                                                <input id="swal_link_limit" type="number" class="swal2-input" placeholder="Link Limit" min="1" max="100" value="${invitation.link_limit || 1}">
+                                                <input id="swal_company_name" class="swal2-input" placeholder="Company Name" value="${invitation.company_name || ''}">
+                                                <textarea id="swal_personal_message" class="swal2-textarea" placeholder="Personal Message">${invitation.personal_message || ''}</textarea>
+                                            </div>
+                                        `,
+                                        width: '600px',
+                                        showCancelButton: true,
+                                        confirmButtonText: 'Save Changes',
+                                        cancelButtonText: 'Cancel',
+                                        confirmButtonColor: '#ffc107',
+                                        preConfirm: () => {
+                                            const expiryDate = $('#swal_expiry_date').val();
+                                            const linkLimit = $('#swal_link_limit').val();
+                                            const ticketType = $('#swal_ticket_type').val();
+                                            
+                                            // Validation
+                                            if (!$('#swal_title_or_name').val()) {
+                                                Swal.showValidationMessage('Title/Name is required');
+                                                return false;
+                                            }
+                                            if (!expiryDate) {
+                                                Swal.showValidationMessage('Expiry date is required');
+                                                return false;
+                                            }
+                                            if (!ticketType) {
+                                                Swal.showValidationMessage('Ticket type is required');
+                                                return false;
+                                            }
+                                            if (!linkLimit || linkLimit < 1 || linkLimit > 100) {
+                                                Swal.showValidationMessage('Link limit must be between 1 and 100');
+                                                return false;
+                                            }
+                                            
+                                            // Check if date is not in the past
+                                            const selectedDate = new Date(expiryDate);
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            
+                                            if (selectedDate < today) {
+                                                Swal.showValidationMessage("Expiry date cannot be in the past");
+                                                return false;
+                                            }
+                                            
+                                            return {
+                                                title_or_name: $('#swal_title_or_name').val(),
+                                                email: $('#swal_email').val(),
+                                                ticket_type: ticketType,
+                                                status: $('#swal_status').val(),
+                                                expiry_date: expiryDate,
+                                                link_limit: parseInt(linkLimit),
+                                                company_name: $('#swal_company_name').val(),
+                                                personal_message: $('#swal_personal_message').val()
+                                            };
+                                        }
+                                    }).then((result) => {
+                                        if (result.isConfirmed) {
+                                            $.ajax({
+                                                url: `/invitations/${row.id}/edit/`,
+                                                method: 'POST',
+                                                headers: {
+                                                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                                    'X-Requested-With': 'XMLHttpRequest'
+                                                },
+                                                contentType: 'application/json',
+                                                data: JSON.stringify(result.value),
+                                                success: function(response) {
+                                                    if (response.success) {
+                                                        Swal.fire({
+                                                            icon: 'success',
+                                                            title: 'Updated!',
+                                                            text: response.message || 'Invitation updated successfully',
+                                                            confirmButtonText: 'OK'
+                                                        }).then(() => {
+                                                            table.ajax.reload(null, false); // Reload without resetting pagination
+                                                        });
+                                                    } else {
+                                                        Swal.fire('Error', response.error || 'Failed to update invitation', 'error');
+                                                    }
+                                                },
+                                                error: function(xhr) {
+                                                    const errorMsg = xhr.responseJSON && xhr.responseJSON.error 
+                                                        ? xhr.responseJSON.error 
+                                                        : 'Failed to update invitation';
+                                                    Swal.fire('Error', errorMsg, 'error');
+                                                }
+                                            });
+                                        }
+                                    });
+                                } else {
+                                    Swal.fire('Error', 'Failed to load invitation data', 'error');
+                                }
+                            },
+                            error: function() {
+                                Swal.fire('Error', 'Failed to load invitation data', 'error');
+                            }
+                        });
                         break;
                     case 'Broadcast':
-                        Swal.fire('Broadcast', 'Broadcasting invitation link...', 'info');
+            
+                      Swal.fire({
+                            title: 'Broadcasting invitation link...',
+                            html: `
+                                <div class="swal2-form-container">
+                                    <input id="swal_email" class="swal2-input" placeholder="Email">
+                                    <textarea id="swal_personal_message" class="swal2-textarea" placeholder="Personal Message"></textarea>
+                                </div>
+                            `,
+                            width: '600px',
+                            showCancelButton: true,
+                            confirmButtonText: 'Save Changes',
+                            cancelButtonText: 'Cancel',
+                            confirmButtonColor: '#ffc107',
+                            preConfirm: () => {
+                            
+                                
+                                return {
+                                    email: $('#swal_email').val(),
+                                    personal_message: $('#swal_personal_message').val()
+                                };
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                $.ajax({
+                                    url: `/send-broadcast/${row.id}/`,
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    },
+                                    contentType: 'application/json',
+                                    data: JSON.stringify(result.value),
+                                    success: function(response) {
+                                        if (response.success) {
+                                            Swal.fire({
+                                                icon: 'success',
+                                                title: 'Send',
+                                                text: response.message || 'Broadcast successfully send',
+                                                confirmButtonText: 'OK'
+                                            }).then(() => {
+                                                table.ajax.reload(null, false); // Reload without resetting pagination
+                                            });
+                                        } else {
+                                            Swal.fire('Error', response.error || 'Failed to send Broadcast', 'error');
+                                        }
+                                    },
+                                    error: function(xhr) {
+                                        const errorMsg = xhr.responseJSON && xhr.responseJSON.error 
+                                            ? xhr.responseJSON.error 
+                                            : 'Failed to update invitation';
+                                        Swal.fire('Error', errorMsg, 'error');
+                                    }
+                                });
+                            }
+                            });
+
                         break;
                     case 'Delete':
-                        Swal.fire({
+                         Swal.fire({
                             title: 'Are you sure?',
                             text: "You won't be able to revert this!",
                             icon: 'warning',
@@ -1344,7 +2076,18 @@
                             confirmButtonText: 'Yes, delete it!'
                         }).then((result) => {
                             if (result.isConfirmed) {
-                                Swal.fire('Deleted!', 'The invitation has been deleted.', 'success');
+                                $.ajax({
+                                    url: `/invitations/${row.id}/delete/`,
+                                    method: 'POST',
+                                    headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                                    success: function(response) {
+                                        Swal.fire('Deleted!', response.message, 'success');
+                                        table.ajax.reload();
+                                    },
+                                    error: function() {
+                                        Swal.fire('Error', 'Failed to delete invitation', 'error');
+                                    }
+                                });
                             }
                         });
                         break;
@@ -1366,6 +2109,97 @@
             $('#expireDate, #personalExpireDate').val(futureDate.toISOString().split('T')[0]);
         });
 
+
+
+
+
+
+        // Function to open edit modal with invitation data
+function openEditModal(invitationId) {
+    // Fetch invitation data via AJAX
+    $.ajax({
+        url: `/invitations/${invitationId}/get/`,  // You'll need to create this endpoint
+        type: 'GET',
+        success: function(response) {
+            if (response.success) {
+                const invitation = response.data;
+                
+                // Populate form fields
+                $('#editInvitationId').val(invitation.id);
+                $('#editGuestName').val(invitation.title_or_name || '');
+                $('#editGuestEmail').val(invitation.email || '');
+                $('#editTicketType').val(invitation.ticket_type || '').trigger('change');
+                $('#editCompanyName').val(invitation.company_name || '');
+                $('#editPersonalMessage').val(invitation.personal_message || '');
+                $('#editExpireDate').val(invitation.expiry_date || '');
+                $('#editLinkLimit').val(invitation.link_limit || 1);
+                $('#editStatus').val(invitation.status || 'active').trigger('change');
+                
+                // Show modal
+                $('#editInvitationModal').modal('show');
+            } else {
+                Swal.fire('Error', 'Failed to load invitation data', 'error');
+            }
+        },
+        error: function() {
+            Swal.fire('Error', 'Failed to load invitation data', 'error');
+        }
+    });
+}
+
+// Attach to edit buttons (adjust selector based on your table structure)
+$(document).on('click', '.edit-invitation-btn', function() {
+    const invitationId = $(this).data('invitation-id');
+    openEditModal(invitationId);
+});
+
+// Handle save button click
+$('#saveEditBtn').click(function() {
+    if ($('#editInvitationForm')[0].checkValidity()) {
+        const invitationId = $('#editInvitationId').val();
+        
+        const formData = {
+            title_or_name: $('#editGuestName').val(),
+            email: $('#editGuestEmail').val(),
+            ticket_type: $('#editTicketType').val(),
+            company_name: $('#editCompanyName').val(),
+            personal_message: $('#editPersonalMessage').val(),
+            expiry_date: $('#editExpireDate').val(),
+            link_limit: $('#editLinkLimit').val(),
+            status: $('#editStatus').val()
+        };
+        
+        $.ajax({
+            url: `/invitations/${invitationId}/edit/`,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+                $('#editInvitationModal').modal('hide');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Updated!',
+                    text: 'Invitation has been updated successfully',
+                    confirmButtonText: 'OK'
+                }).then(() => {
+                    location.reload();
+                });
+            },
+            error: function(res) {
+                const errorMessage = res.responseJSON && res.responseJSON.error 
+                    ? res.responseJSON.error 
+                    : 'Failed to update invitation';
+                Swal.fire('Error', errorMessage, 'error');
+            }
+        });
+    } else {
+        $('#editInvitationForm')[0].reportValidity();
+    }
+});
 
         
 
