@@ -1,0 +1,24 @@
+# Django-specific files
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+media/
+static_collected/
+
+# Virtual Environment
+.env
+venv/
+env/
+
+# IDE-specific files (e.g., PyCharm)
+.idea/
+
+# Other common files to ignore
+.DS_Store
+Thumbs.db
+.coverage
+.tox/
+.eggs/
