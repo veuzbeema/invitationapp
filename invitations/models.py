@@ -24,6 +24,7 @@ class Invitation(TimestampedModel):
     link_limit = models.PositiveIntegerField(default=1) 
     link_count = models.PositiveIntegerField(default=1)  
     registered_count = models.PositiveIntegerField(default=0)
+    phone = models.CharField(max_length=20, blank=True, null=True)
 
     invitation_key = models.CharField(blank=True, null=True)
     status = models.CharField(max_length=50, default='active',choices=STATUS_TYPES)  
@@ -67,3 +68,27 @@ class RegisteredUser(TimestampedModel):
 
     def __str__(self):
         return f"{self.full_name} ({self.email})"
+    
+
+
+class ExportJob(TimestampedModel):
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    )
+    
+    export_format = models.CharField(max_length=10)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    file = models.FileField(upload_to='exports/', null=True, blank=True)
+    progress = models.IntegerField(default=0)
+    error_message = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Export {self.id} - {self.export_format} ({self.status})"

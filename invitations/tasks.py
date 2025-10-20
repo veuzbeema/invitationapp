@@ -5,12 +5,14 @@ from io import StringIO
 from django.core.validators import validate_email as django_validate_email
 from django.core.exceptions import ValidationError
 
+from django.db.models import Q
+
 from django.conf import settings
 from django.core.mail import send_mail
-from invitations.models import Invitation, InvitationCSVUpload
+from invitations.models import Invitation, InvitationCSVUpload, ExportJob
 
 
-
+from .utils import export_csv, export_excel, export_pdf
 
 @shared_task
 def send_invitation_email(invitation_id):
@@ -140,98 +142,79 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
     invite_upload.save()
          
 
-from io import BytesIO
-import openpyxl
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from django.core.files.base import ContentFile
-from datetime import datetime
-import os
 
-@shared_task
-def export_invitations_task(format, keyword, status, type, date):
+
+@shared_task(bind=True)
+def export_invitations_task(self, export_format):
+    from django.utils import timezone
+    # Create export job record
+
+    # keyword, status, inv_type, date_filter, export_format, user_id
+
+
+    keyword = None
+    status = None
+    inv_type = None
+    date_filter = None
+    #export_format = None
+
+
+    export_job = ExportJob.objects.create(
+        export_format=export_format,
+        status='processing',
+        progress=0
+    )
+    
     try:
-        # Filter invitations based on provided parameters
+        # Get filtered invitations
         invitations = Invitation.objects.all()
-        if keyword:
-            invitations = invitations.filter(title_or_name__icontains=keyword) | invitations.filter(email__icontains=keyword)
-        if status:
-            invitations = status.lower()
-        if type:
-            invitations = invitations.filter(invite_type=type)
-        if date:
-            invitations = invitations.filter(expiry_date=date)
-
-        # Generate file based on format
-        file_name = f"invitations_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
-        file_path = os.path.join(settings.MEDIA_ROOT, 'exports', file_name)
-
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        if format == 'csv':
-            output = StringIO()
-            writer = csv.writer(output)
-            writer.writerow(['ID', 'Name', 'Email', 'Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Key'])
-            for inv in invitations:
-                writer.writerow([
-                    inv.id,
-                    inv.title_or_name or 'N/A',
-                    inv.email or 'N/A',
-                    inv.invite_type,
-                    inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
-                    inv.link_limit or 0,
-                    inv.registered_count or 0,
-                    inv.status.capitalize(),
-                    inv.invitation_key or ''
-                ])
-            file_content = ContentFile(output.getvalue().encode('utf-8'))
-            output.close()
-
-        elif format == 'excel':
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = 'Invitations'
-            ws.append(['ID', 'Name', 'Email', 'Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Key'])
-            for inv in invitations:
-                ws.append([
-                    inv.id,
-                    inv.title_or_name or 'N/A',
-                    inv.email or 'N/A',
-                    inv.invite_type,
-                    inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
-                    inv.link_limit or 0,
-                    inv.registered_count or 0,
-                    inv.status.capitalize(),
-                    inv.invitation_key or ''
-                ])
-            output = BytesIO()
-            wb.save(output)
-            file_content = ContentFile(output.getvalue())
-            output.close()
-
-        elif format == 'pdf':
-            output = BytesIO()
-            c = canvas.Canvas(output, pagesize=letter)
-            c.setFont('Helvetica', 12)
-            c.drawString(50, 750, 'Invitations Export')
-            y = 730
-            for inv in invitations:
-                if y < 50:
-                    c.showPage()
-                    y = 750
-                c.drawString(50, y, f"ID: {inv.id}, Name: {inv.title_or_name or 'N/A'}, Email: {inv.email or 'N/A'}, Type: {inv.invite_type}, Status: {inv.status.capitalize()}")
-                y -= 20
-            c.save()
-            file_content = ContentFile(output.getvalue())
-            output.close()
-
-        # Save file to media directory
-        with open(file_path, 'wb') as f:
-            f.write(file_content.read())
+        total_invitations = invitations.count()
         
-        # Return file URL
-        file_url = f"{settings.MEDIA_URL}exports/{file_name}"
-        return {'status': 'SUCCESS', 'file_url': file_url}
-
+        # Apply filters
+        if keyword:
+            invitations = invitations.filter(
+                Q(guest_name__icontains=keyword) | 
+                Q(guest_email__icontains=keyword) |
+                Q(link_title__icontains=keyword)
+            )
+        if status:
+            invitations = invitations.filter(status=status)
+        if inv_type:
+            if inv_type == 'link':
+                invitations = invitations.filter(invitation_type='link')
+            elif inv_type == 'personal':
+                invitations = invitations.filter(invitation_type='personal')
+        if date_filter:
+            invitations = invitations.filter(expiry_date=date_filter)
+        
+        # Update progress after filtering
+        export_job.progress = 20
+        export_job.save()
+        
+        # Generate file based on format
+        if export_format == 'csv':
+            output = export_csv(invitations, export_job, total_invitations)
+        elif export_format == 'excel':
+            output = export_excel(invitations, export_job, total_invitations)
+        elif export_format == 'pdf':
+            output = export_pdf(invitations, export_job, total_invitations)
+        else:
+            raise ValueError('Invalid format')
+        
+        # Update job status
+        export_job.status = 'completed'
+        export_job.progress = 100
+        export_job.file.save(
+            f"invitations_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{export_format}",
+            output
+        )
+        export_job.save()
+        
+        return {'job_id': export_job.id, 'status': 'completed'}
+    
     except Exception as e:
-        return {'status': 'FAILURE', 'error': str(e)}
+        export_job.status = 'failed'
+        export_job.error_message = str(e)
+        export_job.progress = 0
+        export_job.save()
+        raise
