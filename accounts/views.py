@@ -8,8 +8,6 @@ from .forms import UserCreationForm
 
 
 
-
-
 # Login view
 def login_view(request):
     if request.method == 'POST':

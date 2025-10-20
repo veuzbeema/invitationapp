@@ -593,6 +593,47 @@ def send_bulk_personalized_invitation(request):
         errors = []
         created_invitations = []
 
+
+        emails_to_process = []
+        for row in csv_reader:
+            email = row.get('Email', '').strip()
+            if email and validate_email(email):
+                emails_to_process.append(email.lower())
+
+            # Reset reader
+            csv_file.seek(0)
+            csv_data = csv_file.read().decode('utf-8')
+            csv_reader = csv.DictReader(StringIO(csv_data))
+
+            # Check if emails already exist in database for this event
+            existing_invitations = Invitation.objects.filter(
+                event=event,
+                email__in=emails_to_process
+            ).values_list('email', flat=True)
+
+            if existing_invitations:
+                existing_emails = list(existing_invitations)
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Duplicate emails found in database: {", ".join(existing_emails[:5])}{"..." if len(existing_emails) > 5 else ""}',
+                    'duplicate_emails': existing_emails
+                }, status=400)
+
+            # ✅ CHECK FOR DUPLICATES WITHIN THE CSV ITSELF
+            email_counts = {}
+            for email in emails_to_process:
+                email_counts[email] = email_counts.get(email, 0) + 1
+
+            csv_duplicates = [email for email, count in email_counts.items() if count > 1]
+            if csv_duplicates:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Duplicate emails found in CSV: {", ".join(csv_duplicates[:5])}{"..." if len(csv_duplicates) > 5 else ""}',
+                    'duplicate_emails': csv_duplicates
+                }, status=400)
+
+
+
         if not is_large_file:
             # ✅ Process rows FIRST
             for row_num, row in enumerate(csv_reader, start=2):
@@ -691,7 +732,39 @@ def send_bulk_personalized_invitation(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+from django.http import JsonResponse, FileResponse, HttpResponse
+from .models import ExportJob
 
+def exports_jobs(request):
+    
+    jobs = ExportJob.objects.all()
+    return render(request, 'invitations/exports_jobs.html', {"jobs": jobs})
+
+
+@login_required
+def export_job_status(request, task_id):
+    task = AsyncResult(task_id)
+    export_job = ExportJob.objects.get(id=task.result.get('job_id')) if task.ready() and task.result else None
+    
+    response = {
+        'task_id': task_id,
+        'status': task.status,
+        'job_status': export_job.status if export_job else 'pending',
+        'progress': export_job.progress if export_job else 0,
+        'download_url': f'/exports/download/{export_job.id}/' if export_job and export_job.status == 'completed' else None,
+        'error_message': export_job.error_message if export_job and export_job.status == 'failed' else None
+    }
+    return JsonResponse(response)
+
+@login_required
+def export_job_download(request, job_id):
+    try:
+        export_job = ExportJob.objects.get(id=job_id)
+        if export_job.status != 'completed' or not export_job.file:
+            return HttpResponse('File not available', status=404)
+        return FileResponse(export_job.file)
+    except ExportJob.DoesNotExist:
+        return HttpResponse('File not found', status=404)
 
 @login_required
 @require_http_methods(["GET"])
@@ -881,9 +954,17 @@ def invite_register(request, invitation_key):
                 'invitation_key': invitation_key
             })
 
+        phone = ''
+        registered_user = invitation.registered_users.first()  # Get the first related RegisteredUser, if any
+        if registered_user:
+            phone = registered_user.phone
+
         return render(request, 'invitations/invite_register.html', {
             'invitation_key': invitation_key,
-            'event_name': invitation.event.name if invitation.event else 'GITEX GLOBAL 2025'
+            'event_name': invitation.event.name if invitation.event else 'GITEX GLOBAL 2025',
+            'full_name': invitation.title_or_name,
+            'email': invitation.email,
+            'phone': phone,
         })
 
     elif request.method == 'POST':
@@ -908,6 +989,24 @@ def invite_register(request, invitation_key):
         if not full_name:
             return JsonResponse({'error': 'Full name is required.'}, status=400)
         
+        if len(full_name) < 2:
+            return JsonResponse({'error': 'Full name must be at least 2 characters long.'}, status=400)
+        
+        if len(full_name) > 100:
+            return JsonResponse({'error': 'Full name cannot exceed 100 characters.'}, status=400)
+        
+        # Allow letters, spaces, hyphens, and apostrophes; require at least two words
+        name_regex = r"^[a-zA-Z\s'\-]+$"
+        if not re.match(name_regex, full_name):
+            return JsonResponse({'error': 'Full name can only contain letters, spaces, hyphens, and apostrophes.'}, status=400)
+        
+        if len(full_name.split()) < 2:
+            return JsonResponse({'error': 'Full name must include at least a first and last name.'}, status=400)
+        
+        # Ensure email matches invitation's email
+        if email != invitation.email:
+            return JsonResponse({'error': 'Email cannot be changed.'}, status=400)
+        
         email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
         if not email or not re.match(email_regex, email):
             return JsonResponse({'error': 'A valid email address is required.'}, status=400)
@@ -928,6 +1027,7 @@ def invite_register(request, invitation_key):
                 email=email,
                 phone=phone
             )
+            
 
             # Increment registered_count
             invitation.registered_count += 1
@@ -959,170 +1059,183 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from datetime import datetime
+from .tasks import export_invitations_task
+from celery.result import AsyncResult
+from django.http import JsonResponse
+
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def export_jobs(request):
+    # Get filter parameters
+    export_format = request.POST.get('format', 'csv')
+    print('-------export_format------', request.POST, export_format )
+    task = export_invitations_task.delay(export_format)
+    return JsonResponse({'task_id': task.id})
+
 
 class ExportInvitationsView(LoginRequiredMixin, View):
-    def get(self, request):
+    def post(self, request):
         # Get filter parameters
-        keyword = request.GET.get('keyword', '')
-        status = request.GET.get('status', '')
-        inv_type = request.GET.get('type', '')
-        date_filter = request.GET.get('date', '')
-        export_format = request.GET.get('format', 'csv')
+        export_format = request.POST.get('format', 'csv')
+        task = export_invitations_task(export_format)
+        return JsonResponse({'task_id': task.id})
         
-        # Get filtered invitations
-        invitations = Invitation.objects.filter()
+    #     # Get filtered invitations
+    #     invitations = Invitation.objects.filter()
         
-        # Apply filters
-        # if keyword:
-        #     invitations = invitations.filter(
-        #         Q(guest_name__icontains=keyword) | 
-        #         Q(guest_email__icontains=keyword) |
-        #         Q(link_title__icontains=keyword)
-        #     )
-        if status:
-            invitations = invitations.filter(status=status)
-        if inv_type:
-            if inv_type == 'link':
-                invitations = invitations.filter(invitation_type='link')
-            elif inv_type == 'personal':
-                invitations = invitations.filter(invitation_type='personal')
-        if date_filter:
-            invitations = invitations.filter(expiry_date=date_filter)
+    #     # Apply filters
+    #     # if keyword:
+    #     #     invitations = invitations.filter(
+    #     #         Q(guest_name__icontains=keyword) | 
+    #     #         Q(guest_email__icontains=keyword) |
+    #     #         Q(link_title__icontains=keyword)
+    #     #     )
+    #     if status:
+    #         invitations = invitations.filter(status=status)
+    #     if inv_type:
+    #         if inv_type == 'link':
+    #             invitations = invitations.filter(invitation_type='link')
+    #         elif inv_type == 'personal':
+    #             invitations = invitations.filter(invitation_type='personal')
+    #     if date_filter:
+    #         invitations = invitations.filter(expiry_date=date_filter)
         
-        # Generate file based on format
-        if export_format == 'csv':
-            return self.export_csv(invitations)
-        elif export_format == 'excel':
-            return self.export_excel(invitations)
-        elif export_format == 'pdf':
-            return self.export_pdf(invitations)
-        else:
-            return HttpResponse('Invalid format', status=400)
+    #     # Generate file based on format
+    #     if export_format == 'csv':
+    #         return self.export_csv(invitations)
+    #     elif export_format == 'excel':
+    #         return self.export_excel(invitations)
+    #     elif export_format == 'pdf':
+    #         return self.export_pdf(invitations)
+    #     else:
+    #         return HttpResponse('Invalid format', status=400)
     
-    def export_csv(self, invitations):
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    # def export_csv(self, invitations):
+    #     response = HttpResponse(content_type='text/csv')
+    #     response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         
-        writer = csv.writer(response)
-        writer.writerow(['Name', 'Email', 'Type', 'Ticket Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Company', 'Invitation Link'])
+    #     writer = csv.writer(response)
+    #     writer.writerow(['Name', 'Email', 'Type', 'Ticket Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Company', 'Invitation Link'])
         
-        for inv in invitations:
-            writer.writerow([
-                inv.title_or_name ,
-                inv.email or 'N/A',
-                'Link' if inv.invite_type == 'link' else 'Personal',
-                inv.ticket_class.ticket_type,
-                inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
-                inv.link_limit,
-                inv.registered_count,
-                inv.status.capitalize(),
-                inv.company_name or 'N/A',
-                # f"{request.scheme}://{request.get_host()}/invite/{inv.invitation_key}"
-            ])
+    #     for inv in invitations:
+    #         writer.writerow([
+    #             inv.title_or_name ,
+    #             inv.email or 'N/A',
+    #             'Link' if inv.invite_type == 'link' else 'Personal',
+    #             inv.ticket_class.ticket_type,
+    #             inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
+    #             inv.link_limit,
+    #             inv.registered_count,
+    #             inv.status.capitalize(),
+    #             inv.company_name or 'N/A',
+    #             # f"{request.scheme}://{request.get_host()}/invite/{inv.invitation_key}"
+    #         ])
         
-        return response
+    #     return response
     
-    def export_excel(self, invitations):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Invitations"
+    # def export_excel(self, invitations):
+    #     wb = Workbook()
+    #     ws = wb.active
+    #     ws.title = "Invitations"
         
-        # Header style
-        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
+    #     # Header style
+    #     header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    #     header_font = Font(bold=True, color="FFFFFF")
         
-        # Headers
-        headers = ['Name', 'Email', 'Type', 'Ticket Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Company', 'Invitation Link']
-        ws.append(headers)
+    #     # Headers
+    #     headers = ['Name', 'Email', 'Type', 'Ticket Type', 'Expiry Date', 'Limit', 'Registered', 'Status', 'Company', 'Invitation Link']
+    #     ws.append(headers)
         
-        # Style header row
-        for cell in ws[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center', vertical='center')
+    #     # Style header row
+    #     for cell in ws[1]:
+    #         cell.fill = header_fill
+    #         cell.font = header_font
+    #         cell.alignment = Alignment(horizontal='center', vertical='center')
         
-        # Data rows
-        for inv in invitations:
-            ws.append([
-                inv.title_or_name,
-                inv.email or 'N/A',
-                'Link' if inv.invite_type == 'link' else 'Personal',
-                inv.ticket_class.ticket_type,
-                inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
-                inv.link_limit,
-                inv.registered_count,
-                inv.status.capitalize(),
-                inv.company_name or 'N/A',
-                # f"{request.scheme}://{request.get_host()}/invite/{inv.invitation_key}"
-            ])
+    #     # Data rows
+    #     for inv in invitations:
+    #         ws.append([
+    #             inv.title_or_name,
+    #             inv.email or 'N/A',
+    #             'Link' if inv.invite_type == 'link' else 'Personal',
+    #             inv.ticket_class.ticket_type,
+    #             inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
+    #             inv.link_limit,
+    #             inv.registered_count,
+    #             inv.status.capitalize(),
+    #             inv.company_name or 'N/A',
+    #             # f"{request.scheme}://{request.get_host()}/invite/{inv.invitation_key}"
+    #         ])
         
-        # Adjust column widths
-        for column in ws.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(cell.value)
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            ws.column_dimensions[column_letter].width = adjusted_width
+    #     # Adjust column widths
+    #     for column in ws.columns:
+    #         max_length = 0
+    #         column_letter = column[0].column_letter
+    #         for cell in column:
+    #             try:
+    #                 if len(str(cell.value)) > max_length:
+    #                     max_length = len(cell.value)
+    #             except:
+    #                 pass
+    #         adjusted_width = min(max_length + 2, 50)
+    #         ws.column_dimensions[column_letter].width = adjusted_width
         
-        # Save to response
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
-        wb.save(response)
+    #     # Save to response
+    #     response = HttpResponse(
+    #         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    #     )
+    #     response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    #     wb.save(response)
         
-        return response
+    #     return response
     
-    def export_pdf(self, invitations):
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        elements = []
+    # def export_pdf(self, invitations):
+    #     buffer = io.BytesIO()
+    #     doc = SimpleDocTemplate(buffer, pagesize=A4)
+    #     elements = []
         
-        # Title
-        styles = getSampleStyleSheet()
-        title = Paragraph(f"<b>Invitations Export - {datetime.now().strftime('%Y-%m-%d %H:%M')}</b>", styles['Title'])
-        elements.append(title)
+    #     # Title
+    #     styles = getSampleStyleSheet()
+    #     title = Paragraph(f"<b>Invitations Export - {datetime.now().strftime('%Y-%m-%d %H:%M')}</b>", styles['Title'])
+    #     elements.append(title)
         
-        # Table data
-        data = [['Name', 'Email', 'Type', 'Status', 'Expiry', 'Registered']]
+    #     # Table data
+    #     data = [['Name', 'Email', 'Type', 'Status', 'Expiry', 'Registered']]
         
-        for inv in invitations:
-            data.append([
-                inv.title_or_name ,
-                inv.email or 'N/A',
-                'Link' if inv.invite_type == 'link' else 'Personal',
-                inv.ticket_class.ticket_type,
-                inv.status.capitalize(),
-                inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
-                str(inv.registered_count)
-            ])
+    #     for inv in invitations:
+    #         data.append([
+    #             inv.title_or_name ,
+    #             inv.email or 'N/A',
+    #             'Link' if inv.invite_type == 'link' else 'Personal',
+    #             inv.ticket_class.ticket_type,
+    #             inv.status.capitalize(),
+    #             inv.expiry_date.strftime('%Y-%m-%d') if inv.expiry_date else 'N/A',
+    #             str(inv.registered_count)
+    #         ])
         
-        # Create table
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
+    #     # Create table
+    #     table = Table(data)
+    #     table.setStyle(TableStyle([
+    #         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+    #         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+    #         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    #         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+    #         ('FONTSIZE', (0, 0), (-1, 0), 10),
+    #         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+    #         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+    #         ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    #     ]))
         
-        elements.append(table)
-        doc.build(elements)
+    #     elements.append(table)
+    #     doc.build(elements)
         
-        buffer.seek(0)
-        response = HttpResponse(buffer, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
+    #     buffer.seek(0)
+    #     response = HttpResponse(buffer, content_type='application/pdf')
+    #     response['Content-Disposition'] = f'attachment; filename="invitations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
         
-        return response
+    #     return response
     
 
 @csrf_exempt

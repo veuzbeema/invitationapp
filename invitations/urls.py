@@ -17,7 +17,14 @@ urlpatterns = [
     path('invite/<str:invitation_key>/', views.invite_landing, name='invite_landing'),
     path('register/<str:invitation_key>/', views.invite_register, name='invite_register'),
 
-    path('export/', views.ExportInvitationsView.as_view(), name='export_invitations'),
+    path('exports-jobs', views.exports_jobs, name='exports_jobes'),
+
+    path('exports/status/<str:task_id>/', views.export_job_status, name='export_status'),
+    path('exports/download/<int:job_id>/', views.export_job_download, name='export_download'),
+
+    path('export/', views.export_jobs, name='export_invitations'),
+
+
     path('invitations/<int:pk>/view/', views.invitation_view, name='invitation_view'),
     path('invitations/<int:pk>/get/', views.invitation_get, name='invitation_get'),
     path('invitations/<int:pk>/edit/', views.invitation_edit, name='invitation_edit'),

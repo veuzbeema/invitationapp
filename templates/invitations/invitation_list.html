@@ -158,7 +158,7 @@
                             <option value="personalized">Personalized Link</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <label class="form-label small text-muted">Expiry</label>
                         <input type="date" class="form-control form-control-sm" id="filterDate">
                     </div>
@@ -172,6 +172,12 @@
                         <button class="btn btn-sm btn-success ms-auto" id="exportBtn">
                             <i class="fas fa-download"></i> Export
                         </button>
+                      
+                    </div>
+                    <div class="col-md-1">
+                        <a class="btn btn-sm btn-primary ms-auto" href="{% url 'invitations:exports_jobes' %}">
+                            <i class="fas fa-history"></i> Export Jobs
+                        </a>
                     </div>
                 </div>
             </div>
@@ -436,6 +442,7 @@
                             <div class="mt-2">
                                 <span class="badge bg-success" id="validRowsCount">0 Valid</span>
                                 <span class="badge bg-danger" id="invalidRowsCount">0 Invalid</span>
+                                <span class="badge bg-info" id="duplicateRowsCount">0 Duplicate</span>
                                 <span class="badge bg-info" id="totalRowsCount">0 Total</span>
                             </div>
                         </div>
@@ -453,7 +460,7 @@
 
 
 
-    <!-- Edit Invitation Modal -->
+<!-- Edit Invitation Modal -->
 <div class="modal fade" id="editInvitationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -527,6 +534,7 @@
 {% block extra_scripts %} 
 {{ invitation_base_url|json_script:"invitationBaseUrl" }}
  <script>
+    let csvData = [];
         document.addEventListener('DOMContentLoaded', function() {
             var today = new Date().toISOString().split('T')[0];
             document.getElementById('personalExpireDate').setAttribute('min', today);
@@ -575,11 +583,12 @@
             function addPreviewRow(row, validTicketTypes) {
                 const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                 const hasValidEmail = row.email && validateEmail(row.email);
-                const isValid = row.name && hasValidEmail && hasValidTicketType;
+                const isDuplicate = checkDuplicateEmail(row.index, row.email);
+                const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
 
                 const statusBadge = isValid 
                     ? '<span class="badge bg-success">Valid</span>' 
-                    : '<span class="badge bg-danger">Invalid</span>';
+                    : `<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`;
 
                 const ticketTypeSelect = `
                     <select class="form-select form-select-sm ticket-type-select" data-index="${row.index}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px; background-color: white;">
@@ -620,20 +629,27 @@
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
                 let validCount = 0;
                 let invalidCount = 0;
+                let duplicateCount = 0;
 
                 csvData.forEach(row => {
                     const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                     const hasValidEmail = row.email && validateEmail(row.email);
-                    const isValid = row.name && hasValidEmail && hasValidTicketType;
+                    const isDuplicate = checkDuplicateEmail(row.index, row.email);
+                    const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
                     
-                    if (isValid) validCount++;
-                    else invalidCount++;
+                    if (isValid) {
+                        validCount++;
+                    } else {
+                        invalidCount++;
+                        if (isDuplicate) duplicateCount++;
+                    }
                 });
 
                 $('#csvPreviewSection').show();
                 $('#validRowsCount').text(`${validCount} Valid`);
                 $('#invalidRowsCount').text(`${invalidCount} Invalid`);
                 $('#totalRowsCount').text(`${csvData.length} Total`);
+                $('#duplicateRowsCount').text(`${duplicateCount} Duplicate Emails`);
 
                 if (validCount > 0) {
                     $('#sendBulkInviteBtn').prop('disabled', false);
@@ -749,6 +765,11 @@
                 processChunk();
             }
 
+            // Check for duplicate email
+            function checkDuplicateEmail(currentIndex, email) {
+                return csvData.some((row, index) => row.email.toLowerCase() === email.toLowerCase() && row.index !== currentIndex);
+            }
+
             // Validate and update row appearance
             function validateAndUpdateRow(index) {
                 const rowData = csvData.find(r => r.index === index);
@@ -757,6 +778,7 @@
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
                 const hasValidTicketType = validTicketTypes.includes(rowData.ticketType);
                 const hasValidEmail = rowData.email && validateEmail(rowData.email);
+                const isDuplicate = checkDuplicateEmail(rowData.index, rowData.email);
                 const isValid = rowData.name && hasValidEmail && hasValidTicketType;
 
                 const $row = $(`tr[data-index="${index}"]`);
@@ -766,7 +788,7 @@
                         $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
                     } else {
                         $row.addClass('table-danger');
-                        $row.find('td:eq(5)').html('<span class="badge bg-danger">Invalid</span>');
+                        $row.find('td:eq(5)').html(`<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`);
                     }
                 }
 
@@ -928,22 +950,22 @@
                 renderPreviewPage();
                 updateValidationCounts();
 
-                // Scroll to the new row and focus
-                setTimeout(() => {
-                    const $newRow = $(`tr[data-index="${newIndex}"]`);
-                    if ($newRow.length) {
-                        $newRow[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        $newRow.find('.editable-field[data-field="name"]').focus();
-                    }
-                }, 100);
+                // // Scroll to the new row and focus
+                // setTimeout(() => {
+                //     const $newRow = $(`tr[data-index="${newIndex}"]`);
+                //     if ($newRow.length) {
+                //         $newRow[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                //         $newRow.find('.editable-field[data-field="name"]').focus();
+                //     }
+                // }, 100);
 
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Row Added',
-                    text: 'Fill in the details for the new recipient',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
+                // Swal.fire({
+                //     icon: 'success',
+                //     title: 'Row Added',
+                //     text: 'Fill in the details for the new recipient',
+                //     timer: 1500,
+                //     showConfirmButton: false
+                // });
             });
 
             // Download CSV Template
@@ -959,86 +981,144 @@
             });
 
             // Send Bulk - AJAX with FormData for file
-        $('#sendBulkInviteBtn').click(function() {
-            if ($('#bulkPersonalizedForm')[0].checkValidity() && csvData.length > 0) {
-                const validRows = csvData.filter(row => 
-                    row.name && row.email && validateEmail(row.email) && row.ticketType
-                );
-                
-                if (validRows.length === 0) {
-                    Swal.fire('Error', 'No valid rows to send', 'error');
+      $('#sendBulkInviteBtn').click(function() {
+    if ($('#bulkPersonalizedForm')[0].checkValidity() && csvData.length > 0) {
+        const validRows = csvData.filter(row => 
+            row.name && row.email && validateEmail(row.email) && row.ticketType
+        );
+        
+        if (validRows.length === 0) {
+            Swal.fire('Error', 'No valid rows to send', 'error');
+            return;
+        }
+
+        // ✅ CHECK FOR DUPLICATE EMAILS
+        const emailSet = new Set();
+        const duplicates = [];
+        validRows.forEach(row => {
+            if (emailSet.has(row.email.toLowerCase())) {
+                duplicates.push(row.email);
+            } else {
+                emailSet.add(row.email.toLowerCase());
+            }
+        });
+
+        if (duplicates.length > 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Duplicate Emails Found',
+                html: `The following emails are duplicated:<br><strong>${[...new Set(duplicates)].join(', ')}</strong><br><br>Do you want to continue?`,
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Continue',
+                cancelButtonText: 'No, Fix It'
+            }).then((result) => {
+                if (!result.isConfirmed) {
                     return;
                 }
-                
-                Swal.fire({
-                    icon: 'question',
-                    title: 'Send Bulk Invitations',
-                    html: `Send to <strong>${validRows.length}</strong> valid recipients?`,
-                    showCancelButton: true,
-                    confirmButtonText: 'Send All'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        const formData = new FormData();
-                        const maxFileSizeMB = 1; // Set the threshold to 1 MB
-                        const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024; // Convert MB to bytes
-                        // Since JS parses CSV, but to send file, get the file
-                        const fileInput = $('#bulkCsvFile')[0];
-                        if (fileInput.files[0]) {
-                            const fileSize = fileInput.files[0].size; // File size in bytes
-                            formData.append('bulkCsvFile', fileInput.files[0]);
-
-                            // Check if file size exceeds the threshold
-                            if (fileSize > maxFileSizeBytes) {
-                                formData.append('isLargeFile', 'true'); // Append flag for large file
-                            } else {
-                                formData.append('isLargeFile', 'false'); // Append flag for small file
-                            }
-                        }
-
-                        
-
-                        formData.append('bulkPersonalMessage', $('#bulkPersonalMessage').val());
-                        formData.append('bulkExpireDate', $('#bulkExpireDate').val());
-                        
-                        // But since preview edits, perhaps send the csvData as JSON, but for simplicity, assume original file is ok, or regenerate CSV from csvData
-                        // For now, send file as is (edits not persisted to file, but for demo)
-                        
-                        $.ajax({
-                            url: '{% url "invitations:send_bulk_personalized_invitation" %}',  // Add URL
-                            type: 'POST',
-                            data: formData,
-                            processData: false,
-                            contentType: false,
-                            success: function(response) {
-                                if (response.success) {
-                                    $('#bulkPersonalizedModal').modal('hide');
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Bulk Sent!',
-                                        html: `${response.valid_count} invitations sent. ${response.error_count} errors.<br>${response.errors.join('<br>') || 'No errors'}`,
-                                        timer: 5000
-                                    });
-                                    $('#bulkPersonalizedForm')[0].reset();
-                                    $('#csvPreviewSection').hide();
-                                    csvData = [];
-                                    // Refresh table
-                                    location.reload();
-                                } else {
-                                    Swal.fire('Error', response.error, 'error');
-                                }
-                            },
-                            error: function(res) {
-                                // Access the error message from responseJSON
-                                const errorMessage = res.responseJSON && res.responseJSON.error ? res.responseJSON.error : 'An unknown error occurred';
-                                Swal.fire('Error', `Failed to send bulk invitations: ${errorMessage}`, 'error');
-                            }
-                        });
-                    }
-                });
-            } else {
-                $('#bulkPersonalizedForm')[0].reportValidity();
-            }
+                proceedWithSend(validRows);
             });
+        } else {
+            proceedWithSend(validRows);
+        }
+    } else {
+        $('#bulkPersonalizedForm')[0].reportValidity();
+    }
+});
+
+// ✅ SEPARATE FUNCTION TO HANDLE SENDING
+function proceedWithSend(validRows) {
+    Swal.fire({
+        icon: 'question',
+        title: 'Send Bulk Invitations',
+        html: `Send to <strong>${validRows.length}</strong> valid recipients?`,
+        showCancelButton: true,
+        confirmButtonText: 'Send All'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const formData = new FormData();
+            
+            // ✅ REGENERATE CSV FROM csvData (includes added/edited rows)
+            const csvContent = generateCSVFromData(validRows);
+            const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+            const csvFile = new File([csvBlob], 'bulk_invitations.csv', { type: 'text/csv' });
+            
+            const maxFileSizeMB = 1;
+            const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+            const fileSize = csvFile.size;
+            
+            formData.append('bulkCsvFile', csvFile);
+            formData.append('isLargeFile', fileSize > maxFileSizeBytes ? 'true' : 'false');
+            formData.append('bulkPersonalMessage', $('#bulkPersonalMessage').val());
+            formData.append('bulkExpireDate', $('#bulkExpireDate').val());
+            
+            $.ajax({
+                url: '{% url "invitations:send_bulk_personalized_invitation" %}',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        $('#bulkPersonalizedModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Bulk Sent!',
+                            html: `${response.valid_count} invitations sent. ${response.error_count} errors.<br>${response.errors.join('<br>') || 'No errors'}`,
+                            timer: 5000
+                        });
+                        $('#bulkPersonalizedForm')[0].reset();
+                        $('#csvPreviewSection').hide();
+                        csvData = [];
+                        location.reload();
+                    } else {
+                        Swal.fire('Error', response.error, 'error');
+                    }
+                },
+                error: function(res) {
+                    const errorMessage = res.responseJSON && res.responseJSON.error 
+                        ? res.responseJSON.error 
+                        : 'An unknown error occurred';
+                    Swal.fire('Error', `Failed to send bulk invitations: ${errorMessage}`, 'error');
+                }
+            });
+        }
+    });
+}
+
+// ✅ FUNCTION TO GENERATE CSV FROM csvData ARRAY
+function generateCSVFromData(rows) {
+    const headers = ['Full Name', 'Email', 'Ticket Type', 'Company Name', 'Personal Message'];
+    let csvContent = headers.join(',') + '\n';
+    
+    rows.forEach(row => {
+        const line = [
+            escapeCSVField(row.name),
+            escapeCSVField(row.email),
+            escapeCSVField(row.ticketType),
+            escapeCSVField(row.company),
+            escapeCSVField(row.message)
+        ].join(',');
+        csvContent += line + '\n';
+    });
+    
+    return csvContent;
+}
+
+// ✅ ESCAPE CSV FIELDS (handle commas, quotes, newlines)
+function escapeCSVField(field) {
+    if (field === null || field === undefined) {
+        return '';
+    }
+    
+    const stringField = String(field);
+    
+    // If field contains comma, quote, or newline, wrap in quotes and escape quotes
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+        return '"' + stringField.replace(/"/g, '""') + '"';
+    }
+    
+    return stringField;
+}
 
             // Initialize DataTable
             const table = $('#invitationTable').DataTable({
@@ -1579,98 +1659,65 @@
                 table.search('').draw();
             });
 
-           $('#exportBtn').click(function() {
-                Swal.fire({
-                    title: 'Export Data',
-                    text: 'Select export format',
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Excel',
-                    cancelButtonText: 'CSV',
-                    showDenyButton: true,
-                    denyButtonText: 'PDF'
-                }).then((result) => {
-                    if (result.isConfirmed || result.isDenied || result.dismiss === Swal.DismissReason.cancel) {
-                        const format = result.isConfirmed ? 'excel' : result.isDenied ? 'pdf' : 'csv';
-                        
-                        // Show loading
-                        Swal.fire({
-                            icon: 'info',
-                            title: 'Exporting...',
-                            text: `Preparing ${format.toUpperCase()} file`,
-                            allowOutsideClick: false,
-                            didOpen: () => {
-                                Swal.showLoading();
-                            }
-                        });
-                        
-                        // Get current filters
-                        const keyword = $('#searchKeyword').val();
-                        const status = $('#filterStatus').val();
-                        const type = $('#filterType').val();
-                        const date = $('#filterDate').val();
-                        
-                        // Build export URL with query parameters
-                        const params = new URLSearchParams({
-                            format: format,
-                            keyword: keyword || '',
-                            status: status || '',
-                            type: type || '',
-                            date: date || ''
-                        });
-                        
-                        const exportUrl = `{% url 'invitations:export_invitations' %}?${params.toString()}`;
-                        
-                        // Method 1: Direct download via iframe (works for all formats)
-                        const iframe = document.createElement('iframe');
-                        iframe.style.display = 'none';
-                        iframe.src = exportUrl;
-                        document.body.appendChild(iframe);
-                        
-                        // Remove iframe after download starts
-                        // setTimeout(() => {
-                        //     document.body.removeChild(iframe);
-                        //     Swal.fire({
-                        //         icon: 'success',
-                        //         title: 'Download Started!',
-                        //         text: `Your ${format.toUpperCase()} file is downloading`,
-                        //         timer: 2000,
-                        //         showConfirmButton: false
-                        //     });
-                        // }, 1000);
-                        
-                     
-                        fetch(exportUrl)
-                            .then(response => {
-                                if (!response.ok) throw new Error('Export failed');
-                                return response.blob();
-                            })
-                            .then(blob => {
-                                // Create download link
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `invitations_${new Date().getTime()}.${format === 'excel' ? 'xlsx' : format}`;
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                window.URL.revokeObjectURL(url);
-                                
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Downloaded!',
-                                    text: `Your ${format.toUpperCase()} file has been downloaded`,
-                                    timer: 2000,
-                                    showConfirmButton: false
-                                });
-                            })
-                            .catch(error => {
-                                Swal.fire('Error', 'Failed to export file', 'error');
-                            });
-                        
-                    }
+          $('#exportBtn').click(function() {
+            Swal.fire({
+                title: 'Export Data',
+                text: 'Select export format',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Excel',
+                cancelButtonText: 'CSV',
+                showDenyButton: true,
+                denyButtonText: 'PDF'
+            }).then((result) => {
+            
+                if (result.isConfirmed || result.isDenied || result.dismiss === Swal.DismissReason.cancel) {
+                   
+                   
+                const format = result.isConfirmed ? 'excel' : result.isDenied ? 'pdf' : 'csv';
+            
+          
+         
+            // Create FormData object
+            const formData = new FormData();
+            formData.append('format', format);
+            
+            
+            // Start Celery task
+            fetch("{% url 'invitations:export_invitations' %}", {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                },
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to start export');
+                    return response.json();
+                })
+                .then(data => {
+                    const taskId = data.task_id;
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Export in Progress',
+                        text: 'This may take a moment. You will be notified when it is ready.',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    // Redirect to jobs list or start polling
+                    setTimeout(() => {
+                        window.location.href = '/exports-jobs';
+                    }, 2000);
+                })
+                .catch(error => {
+                    Swal.fire('Error', 'Failed to start export: ' + error.message, 'error');
                 });
-            });
+            }
+        });
+    });
 
             $('#submitLinkBtn').click(function() {
     if ($('#generateLinkForm')[0].checkValidity()) {
@@ -2112,8 +2159,6 @@
 
 
 
-
-
         // Function to open edit modal with invitation data
 function openEditModal(invitationId) {
     // Fetch invitation data via AJAX
@@ -2201,6 +2246,45 @@ $('#saveEditBtn').click(function() {
     }
 });
 
+
+
+// Check for duplicate emails in preview
+function checkDuplicateEmail(index, email) {
+    if (!email || !csvData || !Array.isArray(csvData)) return false;
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    let isDuplicate = false;
+    
+    // Check against other rows in csvData
+    csvData.forEach(row => {
+        if (row.index !== index && row.email.toLowerCase().trim() === normalizedEmail) {
+            isDuplicate = true;
+        }
+    });
+    
+    return isDuplicate;
+}
+
+//Check email exists in database
+function checkEmailInDatabase(email) {
+    return new Promise((resolve, reject) => {
+        $.ajax({
+            url: '/check-email-exists/',  // You'll need to create this endpoint
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ email: email }),
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                resolve(response.exists);
+            },
+            error: function() {
+                resolve(false); // On error, assume not duplicate
+            }
+        });
+    });
+}
         
 
 

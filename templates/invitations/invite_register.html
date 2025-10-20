@@ -97,18 +97,18 @@
         </div>
         <form id="registerForm" action="/register/{{ invitation_key }}/" method="POST">
             <div class="mb-3">
-                <label for="fullName" class="form-label">Full Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="fullName" name="full_name" required>
-                <div id="fullNameError" class="error-message">Please enter your full name</div>
+                <label for="fullName" class="form-label block text-sm font-medium text-gray-700">Full Name <span class="text-red-500">*</span></label>
+                <input type="text" class="form-control w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="fullName" name="full_name" value="{{ full_name }}" required>
+                <div id="fullNameError" class="error-message text-red-500 text-xs mt-1 hidden">Please enter a valid full name</div>
             </div>
             <div class="mb-3">
                 <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
-                <input type="email" class="form-control" id="email" name="email" required>
+                <input type="email" class="form-control" id="email" name="email" value="{{ email }}" readonly required>
                 <div id="emailError" class="error-message">Please enter a valid email address</div>
             </div>
             <div class="mb-3">
                 <label for="phone" class="form-label">Phone Number <span class="text-danger">*</span></label>
-                <input type="tel" class="form-control" id="phone" name="phone" required>
+                <input type="tel" class="form-control" id="phone" name="phone" value="{{ phone }}" required>
                 <div id="phoneError" class="error-message">Please enter a valid phone number</div>
             </div>
             <button type="submit" class="btn btn-primary">
