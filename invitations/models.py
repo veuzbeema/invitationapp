@@ -26,7 +26,7 @@ class Invitation(TimestampedModel):
     registered_count = models.PositiveIntegerField(default=0)
     phone = models.CharField(max_length=20, blank=True, null=True)
 
-    invitation_key = models.CharField(blank=True, null=True)
+    invitation_key = models.CharField(max_length = 50, blank=True, null=True)
     status = models.CharField(max_length=50, default='active',choices=STATUS_TYPES)  
     ticket_class = models.ForeignKey(TicketClass, on_delete=models.SET_NULL, null=True, blank=True)
     personal_message = models.TextField(blank=True, null=True)
