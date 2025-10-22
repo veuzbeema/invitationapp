@@ -1160,10 +1160,8 @@ function escapeCSVField(field) {
                     { data: 'registered' },
                     { 
                         data: null,
-                        render: function(data, type, row) {
-                            const baseUrl = window.location.origin;  // e.g., https://yourdomain.com
-                            const invitationKey = row.key;  // Assuming 'key' is the invitation_key field
-                            return `<span class="invitation-link">${baseUrl}/invite/${invitationKey}</span>`;
+                        render: function() {
+                            return '<button class="btn btn-sm btn-primary copy-link"><i class="fas fa-copy me-1"></i>Copy Link</button>';
                         }
                     },
                   {

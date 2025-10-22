@@ -728,7 +728,6 @@ def send_bulk_personalized_invitation(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
     
-    
 
 from django.http import JsonResponse, FileResponse, HttpResponse
 from .models import ExportJob
