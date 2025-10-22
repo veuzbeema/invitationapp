@@ -52,7 +52,7 @@ def send_invitation_email(invitation_id):
 
 @shared_task
 def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
-    from events.models import TicketClass  # adjust import if needed
+    from events.models import TicketClass 
     errors = []
     created_invitations = []
     valid_rows = 0
