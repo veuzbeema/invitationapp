@@ -1167,7 +1167,7 @@ function escapeCSVField(field) {
                   {
                     data: 'status',
                     render: function(data) {
-                        const statusClass = data === 'Active' ? 'success' : 
+                        const statusClass = data === 'Active' ? 'success' :     
                                         data === 'Expired' ? 'danger' : 'secondary';
                         return `<span class="badge bg-${statusClass}">${data}</span>`;
                     }
@@ -1197,6 +1197,7 @@ function escapeCSVField(field) {
                         }
                     }
                 ],
+                
                 initComplete: function() {
                     $('.dataTables_length select').addClass('form-select form-select-sm').css({
                         'width': 'auto',
@@ -1571,19 +1572,63 @@ function escapeCSVField(field) {
         });
     });
 
-            $(document).on('click', '.copy-link', function() {
-                const rowData = table.row($(this).parents('tr')).data();
-                const invitationKey = rowData.key;
-                // const invitationBaseUrl = JSON.parse(document.getElementById('invitationBaseUrl').textContent);
-                const invitationBaseUrl = 'http://localhost:8000/'
-                navigator.clipboard.writeText(`${invitationBaseUrl}invite/${invitationKey}`);
-                const btn = $(this);
-                const originalHtml = btn.html();
-                btn.html('<i class="fas fa-check me-1"></i>Copied!').addClass('btn-success').removeClass('btn-primary');
-                setTimeout(() => {
-                    btn.html(originalHtml).addClass('btn-primary').removeClass('btn-success');
-                }, 2000);
+           $(document).on('click', '.copy-link', function() {
+    const rowData = table.row($(this).parents('tr')).data();
+    const invitationKey = rowData.key;
+
+    // 👉 Use dynamic domain instead of hardcoded localhost
+    const invitationBaseUrl = window.location.origin + '/';
+    const inviteUrl = `${invitationBaseUrl}invite/${invitationKey}`;
+
+    const btn = $(this);
+    const originalHtml = btn.html();
+
+    // --- Helper fallback function for insecure (HTTP) contexts ---
+    function fallbackCopyTextToClipboard(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";  // avoid scrolling
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+        } catch (err) {
+            console.error('Fallback: unable to copy', err);
+        }
+
+        document.body.removeChild(textArea);
+    }
+
+    // --- Main copy logic with HTTPS check ---
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(inviteUrl)
+            .then(() => showCopiedState())
+            .catch(err => {
+                console.warn('Clipboard API failed, using fallback:', err);
+                fallbackCopyTextToClipboard(inviteUrl);
+                showCopiedState();
             });
+    } else {
+        fallbackCopyTextToClipboard(inviteUrl);
+        showCopiedState();
+    }
+
+    // --- Button UI feedback ---
+    function showCopiedState() {
+        btn.html('<i class="fas fa-check me-1"></i>Copied!')
+            .addClass('btn-success')
+            .removeClass('btn-primary');
+
+        setTimeout(() => {
+            btn.html(originalHtml)
+                .addClass('btn-primary')
+                .removeClass('btn-success');
+        }, 2000);
+    }
+});
 
             $('#searchBtn').click(function() {
                 showLoading();
