@@ -903,7 +903,7 @@ def invite_landing(request, invitation_key):
     invitation = get_object_or_404(Invitation, invitation_key=invitation_key)
     
     # Check if invitation is active and not expired
-    if invitation.status != 'active' or invitation.expiry_date < timezone.now():
+    if invitation.status != 'active' or invitation.expiry_date.date() < timezone.now().date():
         return render(request, 'invitations/invite_landing.html', {
             'error': 'This invitation is either inactive or has expired.',
             'invitation_key': invitation_key,
@@ -938,7 +938,7 @@ def invite_register(request, invitation_key):
         invitation = get_object_or_404(Invitation, invitation_key=invitation_key)
         
         # Check if invitation is active and not expired
-        if invitation.status != 'active' or invitation.expiry_date < timezone.now():
+        if invitation.status != 'active' or invitation.expiry_date.date() < timezone.now().date():
             return render(request, 'invite_register.html', {
                 'error': 'This invitation is either inactive or has expired.',
                 'invitation_key': invitation_key
@@ -971,7 +971,7 @@ def invite_register(request, invitation_key):
         if invitation.status != 'active':
             return JsonResponse({'error': 'This invitation is not active.'}, status=400)
         
-        if invitation.expiry_date < timezone.now():
+        if invitation.expiry_date.date() < timezone.now().date():
             return JsonResponse({'error': 'This invitation has expired.'}, status=400)
         
         if invitation.registered_count >= invitation.link_limit:
