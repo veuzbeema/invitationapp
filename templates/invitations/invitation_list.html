@@ -2119,7 +2119,7 @@ function escapeCSVField(field) {
                     return response.json();
                 })
                 .then(data => {
-                    const taskId = data.task_id;
+                    const jobId = data.job_id;
                     Swal.fire({
                         icon: 'info',
                         title: 'Export in Progress',
@@ -2131,7 +2131,7 @@ function escapeCSVField(field) {
                     });
                     // Redirect to jobs list or start polling
                     setTimeout(() => {
-                        window.location.href = '/exports-jobs';
+                        window.location.href = `/exports-jobs?highlight=${jobId}`;
                     }, 2000);
                 })
                 .catch(error => {

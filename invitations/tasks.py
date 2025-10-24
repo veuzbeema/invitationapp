@@ -202,25 +202,29 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
 
 
 @shared_task(bind=True)
-def export_invitations_task(self, export_format):
+def export_invitations_task(self, export_format, job_id=None):
+
     from django.utils import timezone
-    # Create export job record
+    
+    export_job = ExportJob.objects.get(id=job_id) if job_id else None
 
-    # keyword, status, inv_type, date_filter, export_format, user_id
 
+    export_job.status = 'processing'
+    export_job.progress = 10
+    export_job.save()
 
     keyword = None
     status = None
     inv_type = None
     date_filter = None
-    #export_format = None
+    # export_format = None
 
 
-    export_job = ExportJob.objects.create(
-        export_format=export_format,
-        status='processing',
-        progress=0
-    )
+    # export_job = ExportJob.objects.create(
+    #     export_format=export_format,
+    #     status='processing',
+    #     progress=0
+    # )
     
     try:
         # Get filtered invitations
@@ -245,8 +249,12 @@ def export_invitations_task(self, export_format):
             invitations = invitations.filter(expiry_date=date_filter)
         
         # Update progress after filtering
-        export_job.progress = 20
-        export_job.save()
+        # export_job.progress = 20
+        # export_job.save()
+
+        if export_job:
+            export_job.progress = 20
+            export_job.save()
         
         # Generate file based on format
         if export_format == 'csv':
@@ -260,16 +268,17 @@ def export_invitations_task(self, export_format):
             raise ValueError('Invalid format')
         
         # Update job status
-        export_job.status = 'completed'
-        export_job.progress = 100
-        export_job.file.save(
-            f"invitations_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{export_format}",
-            output
-        )
-        export_job.save()
-        
+        if export_job:
+            export_job.status = 'completed'
+            export_job.progress = 100
+            export_job.file.save(
+                f"invitations_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{export_format}",
+                output
+            )
+            export_job.save()
+
         return {'job_id': export_job.id, 'status': 'completed'}
-    
+        
     except Exception as e:
         export_job.status = 'failed'
         export_job.error_message = str(e)

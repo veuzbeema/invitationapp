@@ -1101,9 +1101,21 @@ from django.http import JsonResponse
 def export_jobs(request):
     # Get filter parameters
     export_format = request.POST.get('format', 'csv')
+
+    # CREATE DB RECORD FIRST
+    export_job = ExportJob.objects.create(
+        export_format=export_format,
+        status='processing',
+        progress=0
+    )
+
     print('-------export_format------', request.POST, export_format )
-    task = export_invitations_task.delay(export_format)
-    return JsonResponse({'task_id': task.id})
+    task = export_invitations_task.delay(export_format, job_id=export_job.id)
+    print('-------task------', task.id )
+    return JsonResponse({
+        'task_id': task.id,
+        'job_id': export_job.id
+        })
 
 
 class ExportInvitationsView(LoginRequiredMixin, View):
@@ -1392,12 +1404,11 @@ from .tasks import export_invitations_task
 @require_http_methods(["POST"])
 def export_invitations(request):
     try:
-        data = json.loads(request.body)
-        format = data.get('format')
-        keyword = data.get('keyword')
-        status = data.get('status')
-        type = data.get('type')
-        date = data.get('date')
+        format = request.POST.get('format')
+        keyword = request.POST.get('keyword')
+        status = request.POST.get('status')
+        type = request.POST.get('type')
+        date = request.POST.get('date')
 
         if format not in ['csv', 'excel', 'pdf']:
             return JsonResponse({'success': False, 'error': 'Invalid format'}, status=400)
@@ -1409,16 +1420,23 @@ def export_invitations(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 @require_http_methods(["GET"])
-def check_export_status(request):
-    task_id = request.GET.get('task_id')
-    if not task_id:
-        return JsonResponse({'status': 'FAILURE', 'error': 'No task ID provided'}, status=400)
+def check_export_status(request, job_id):
+    try:
+        job = ExportJob.objects.get(id=job_id)
+        return JsonResponse({
+            'job_status': job.status,
+            'progress': job.progress,
+            'download_url': job.file.url if job.file and job.status == 'completed' else None,
+            'error_message': job.error_message
+        })
+    except ExportJob.DoesNotExist:
+        return JsonResponse({'job_status': 'failed', 'error_message': 'Job not found'}, status=404)
+    
 
-    task = AsyncResult(task_id)
-    if task.state == 'SUCCESS':
-        result = task.get()
-        return JsonResponse(result)
-    elif task.state == 'FAILURE':
-        return JsonResponse({'status': 'FAILURE', 'error': str(task.get(propagate=False))})
-    else:
-        return JsonResponse({'status': task.state})
+def export_jobs_list(request):
+    jobs = ExportJob.objects.all().order_by('-created_at')
+    highlight = request.GET.get('highlight')
+    return render(request, 'exports/jobs_list.html', {
+        'jobs': jobs,
+        'highlight': highlight
+    })

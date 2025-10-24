@@ -37,7 +37,7 @@ urlpatterns = [
     path('bulk-delete/', views.bulk_delete, name='bulk-delete'),
 
     path('export/', views.export_invitations, name='export_invitations'),
-    path('export/status/', views.check_export_status, name='check_export_status'),
+    path('export/status/<int:job_id>/', views.check_export_status, name='check_export_status'),
 
 
    
