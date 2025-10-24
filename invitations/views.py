@@ -562,6 +562,9 @@ def send_bulk_personalized_invitation(request):
     default_message = request.POST.get('bulkPersonalMessage', '')
     expire_date_str = request.POST.get('bulkExpireDate')
     is_large_file = request.POST.get('isLargeFile', 'false').lower() == 'true'
+
+    print('-----------request.FILES------', request.FILES)
+    print('-------------request.POST--------', request.POST)
     
     if not csv_file or not expire_date_str:
         return JsonResponse({'success': False, 'error': 'Missing CSV file or expire date'}, status=400)
@@ -587,6 +590,11 @@ def send_bulk_personalized_invitation(request):
     # Read and parse CSV for duplicate email check
     csv_file.seek(0)  # Reset file pointer
     csv_data = csv_file.read().decode('utf-8')
+
+    # DEBUG: Check CSV content
+    print('-------CSV FILE SIZE-------', len(csv_data))
+    # print('-------CSV FIRST 500 CHARS-------', csv_data)
+
     csv_reader = csv.DictReader(StringIO(csv_data))
 
     # Validate headers
@@ -630,13 +638,20 @@ def send_bulk_personalized_invitation(request):
     valid_rows = 0
     created_invitations = []
 
+
+    print('---------111111-------------', is_large_file)
     if not is_large_file:
         # Reset reader for processing
         csv_file.seek(0)
         csv_data = csv_file.read().decode('utf-8')
         csv_reader = csv.DictReader(StringIO(csv_data))
+
+        print('---------1111e3311-------------', is_large_file)
         
         for row_num, row in enumerate(csv_reader, start=2):
+
+
+            
             name = row.get('Full Name', '').strip()
             email = row.get('Email', '').strip().lower()
             ticket_type = row.get('Ticket Type', '').strip().lower()
@@ -661,6 +676,7 @@ def send_bulk_personalized_invitation(request):
             
             try:
                 ticket_class = TicketClass.objects.get(event=event, ticket_type=ticket_type)
+                #ticket_class = TicketClass.objects.first()
             except TicketClass.DoesNotExist:
                 errors.append(f'Row {row_num}: Ticket class "{ticket_type}" not found')
                 continue
