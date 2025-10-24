@@ -556,177 +556,195 @@ def send_bulk_personalized_invitation(request):
     """
     Handle bulk personalized invitations via AJAX POST with file upload.
     """
-    try:
-        # Get form data
-        csv_file = request.FILES.get('bulkCsvFile')
-        default_message = request.POST.get('bulkPersonalMessage', '')
-        expire_date_str = request.POST.get('bulkExpireDate')
-        is_large_file = request.POST.get('isLargeFile', 'false').lower() == 'true'
-        
-        if not csv_file or not expire_date_str:
-            return JsonResponse({'success': False, 'error': 'Missing CSV file or expire date'}, status=400)
-        
-        # Parse expire date
-        expire_date = datetime.strptime(expire_date_str, '%Y-%m-%d').replace(tzinfo=None)
+    # try:
+    # Get form data
+    csv_file = request.FILES.get('bulkCsvFile')
+    default_message = request.POST.get('bulkPersonalMessage', '')
+    expire_date_str = request.POST.get('bulkExpireDate')
+    is_large_file = request.POST.get('isLargeFile', 'false').lower() == 'true'
+    
+    if not csv_file or not expire_date_str:
+        return JsonResponse({'success': False, 'error': 'Missing CSV file or expire date'}, status=400)
+    
+    # Parse expire date
+    expire_date = datetime.strptime(expire_date_str, '%Y-%m-%d').replace(tzinfo=None)
 
-        if expire_date < datetime.now():
-            return JsonResponse({'success': False, 'error': 'Expire date must be in the future'}, status=400)
-        
-        # Get event
-        event = Event.objects.first()
-        if not event:
-            return JsonResponse({'success': False, 'error': 'No event found'}, status=500)
-        
-        # Initialize variables for duplicate checking
-        emails_to_process = []
-        email_counts = {}
-        duplicate_emails = []
-        errors = []
+    if expire_date < datetime.now():
+        return JsonResponse({'success': False, 'error': 'Expire date must be in the future'}, status=400)
+    
+    # Get event
+    event = Event.objects.first()
+    if not event:
+        return JsonResponse({'success': False, 'error': 'No event found'}, status=500)
+    
+    # Initialize variables for duplicate checking
+    emails_to_process = []
+    email_counts = {}
+    duplicate_emails = []
+    duplicate_counts = {'csv': 0, 'db': 0}
+    errors = []
 
-        # Read and parse CSV for duplicate email check
-        csv_file.seek(0)  # Reset file pointer
+    # Read and parse CSV for duplicate email check
+    csv_file.seek(0)  # Reset file pointer
+    csv_data = csv_file.read().decode('utf-8')
+    csv_reader = csv.DictReader(StringIO(csv_data))
+
+    # Validate headers
+    expected_headers = ['Full Name', 'Email', 'Ticket Type', 'Company Name', 'Personal Message']
+    if not all(header in csv_reader.fieldnames for header in expected_headers[:3]):
+        return JsonResponse({'success': False, 'error': 'Invalid CSV headers. Expected: Full Name, Email, Ticket Type'}, status=400)
+
+    # Collect emails for duplicate check
+    for row in csv_reader:
+        email = row.get('Email', '').strip().lower()
+        if email and validate_email(email):
+            emails_to_process.append(email)
+            email_counts[email] = email_counts.get(email, 0) + 1
+
+    # Identify duplicates within the CSV
+        # Identify duplicates within the CSV
+    csv_duplicates = [email for email, count in email_counts.items() if count > 1]
+    if csv_duplicates:
+        duplicate_counts['csv'] = sum(email_counts[email] - 1 for email in csv_duplicates)
+        errors.append(f'Warning: {duplicate_counts["csv"]} duplicate emails found in CSV: {", ".join(csv_duplicates[:5])}{"..." if len(csv_duplicates) > 5 else ""}')
+        duplicate_emails.extend(csv_duplicates)
+
+    # Check existing emails in the database
+    existing_invitations = Invitation.objects.filter(
+        event=event,
+        email__in=emails_to_process
+    ).values_list('email', flat=True)
+    existing_emails = list(existing_invitations)
+    if existing_emails:
+        duplicate_counts['db'] = len(existing_emails)
+        errors.append(f'Warning: {duplicate_counts["db"]} emails already exist in database: {", ".join(list(existing_emails)[:5])}{"..." if len(existing_emails) > 5 else ""}')
+        duplicate_emails.extend(existing_emails)
+
+    # Remove the redundant duplicate check that caused the error
+    # The following block was incorrectly placed and caused the 'emails_to_process' error
+    # It’s already handled above, so we don’t need it again
+
+
+
+    valid_ticket_types = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor']
+    valid_rows = 0
+    created_invitations = []
+
+    if not is_large_file:
+        # Reset reader for processing
+        csv_file.seek(0)
         csv_data = csv_file.read().decode('utf-8')
         csv_reader = csv.DictReader(StringIO(csv_data))
-
-        # Validate headers
-        expected_headers = ['Full Name', 'Email', 'Ticket Type', 'Company Name', 'Personal Message']
-        if not all(header in csv_reader.fieldnames for header in expected_headers[:3]):
-            return JsonResponse({'success': False, 'error': 'Invalid CSV headers. Expected: Full Name, Email, Ticket Type'}, status=400)
-
-        # Collect emails for duplicate check
-        for row in csv_reader:
+        
+        for row_num, row in enumerate(csv_reader, start=2):
+            name = row.get('Full Name', '').strip()
             email = row.get('Email', '').strip().lower()
-            if email and validate_email(email):
-                emails_to_process.append(email)
-                email_counts[email] = email_counts.get(email, 0) + 1
+            ticket_type = row.get('Ticket Type', '').strip().lower()
+            company = row.get('Company Name', '').strip()
+            personal_message = row.get('Personal Message', default_message).strip()
 
-        # Identify duplicates within the CSV
-        csv_duplicates = [email for email, count in email_counts.items() if count > 1]
-        if csv_duplicates:
-            errors.append(f'Warning: Duplicate emails found in CSV: {", ".join(csv_duplicates[:5])}{"..." if len(csv_duplicates) > 5 else ""}')
-            duplicate_emails.extend(csv_duplicates)
-
-        # Check existing emails in the database
-        existing_invitations = Invitation.objects.filter(
-            event=event,
-            email__in=emails_to_process
-        ).values_list('email', flat=True)
-        existing_emails = list(existing_invitations)
-        if existing_emails:
-            errors.append(f'Warning: Emails already exist in database: {", ".join(existing_emails[:5])}{"..." if len(existing_emails) > 5 else ""}')
-            duplicate_emails.extend(existing_emails)
-
-        # Remove the redundant duplicate check that caused the error
-        # The following block was incorrectly placed and caused the 'emails_to_process' error
-        # It’s already handled above, so we don’t need it again
-
-        valid_ticket_types = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor']
-        valid_rows = 0
-        created_invitations = []
-
-        if not is_large_file:
-            # Reset reader for processing
-            csv_file.seek(0)
-            csv_data = csv_file.read().decode('utf-8')
-            csv_reader = csv.DictReader(StringIO(csv_data))
+            if not (name and email and ticket_type):
+                errors.append(f'Row {row_num}: Missing required fields (Full Name, Email, Ticket Type)')
+                continue
             
-            for row_num, row in enumerate(csv_reader, start=2):
-                name = row.get('Full Name', '').strip()
-                email = row.get('Email', '').strip().lower()
-                ticket_type = row.get('Ticket Type', '').strip().lower()
-                company = row.get('Company Name', '').strip()
-                personal_message = row.get('Personal Message', default_message).strip()
-
-                if not (name and email and ticket_type):
-                    errors.append(f'Row {row_num}: Missing required fields (Full Name, Email, Ticket Type)')
-                    continue
-                
-                if not validate_email(email):
-                    errors.append(f'Row {row_num}: Invalid email "{email}"')
-                    continue
-                
-                if ticket_type not in valid_ticket_types:
-                    errors.append(f'Row {row_num}: Invalid ticket type "{ticket_type}". Must be one of {valid_ticket_types}')
-                    continue
-                
-                if email in duplicate_emails:
-                    errors.append(f'Row {row_num}: Skipping duplicate email "{email}"')
-                    continue
-                
-                try:
-                    ticket_class = TicketClass.objects.get(event=event, ticket_type=ticket_type)
-                except TicketClass.DoesNotExist:
-                    errors.append(f'Row {row_num}: Ticket class "{ticket_type}" not found')
-                    continue
-                
-                # Generate key
-                invitation_key = str(uuid.uuid4()).replace('-', '')[:12].upper()
-                
-                # Create invitation
-                invitation = Invitation.objects.create(
-                    event=event,
-                    title_or_name=name,
-                    email=email,
-                    invite_type='personalized',
-                    expiry_date=expire_date,
-                    link_limit=1,
-                    link_count=1,
-                    registered_count=0,
-                    invitation_key=invitation_key,
-                    status='active',
-                    ticket_class=ticket_class,
-                    company_name=company,
-                    personal_message=personal_message,
-                )
-                
-                created_invitations.append(invitation.id)
-                valid_rows += 1
-                
-                send_invitation_email.delay(invitation.id)
+            if not validate_email(email):
+                errors.append(f'Row {row_num}: Invalid email "{email}"')
+                continue
             
-            # Create CSV upload record AFTER processing
-            csv_upload = InvitationCSVUpload.objects.create(
+            if ticket_type not in valid_ticket_types:
+                errors.append(f'Row {row_num}: Invalid ticket type "{ticket_type}". Must be one of {valid_ticket_types}')
+                continue
+            
+            if email in existing_emails:
+                errors.append(f'Row {row_num}: Skipping duplicate email "{email}"')
+                continue
+            
+            try:
+                ticket_class = TicketClass.objects.get(event=event, ticket_type=ticket_type)
+            except TicketClass.DoesNotExist:
+                errors.append(f'Row {row_num}: Ticket class "{ticket_type}" not found')
+                continue
+            
+            # Generate key
+            invitation_key = str(uuid.uuid4()).replace('-', '')[:12].upper()
+            
+            # Create invitation
+            invitation = Invitation.objects.create(
                 event=event,
-                file=csv_file,
-                status='success' if not errors else ('partial' if valid_rows > 0 else 'failed'),
-                processed=True,
-                processed_at=datetime.now(),
-                processed_count=valid_rows,
-                failed_count=len(errors),
-                error_message='\n'.join(errors[:100]) if errors else ''
+                title_or_name=name,
+                email=email,
+                invite_type='personalized',
+                expiry_date=expire_date,
+                link_limit=1,
+                link_count=1,
+                registered_count=0,
+                invitation_key=invitation_key,
+                status='active',
+                ticket_class=ticket_class,
+                company_name=company,
+                personal_message=personal_message,
             )
             
-            return JsonResponse({
+            created_invitations.append(invitation.id)
+            valid_rows += 1
+            
+            send_invitation_email.delay(invitation.id)
+        
+        # Create CSV upload record AFTER processing
+        csv_upload = InvitationCSVUpload.objects.create(
+            event=event,
+            file=csv_file,
+            status='success' if not errors else ('partial' if valid_rows > 0 else 'failed'),
+            processed=True,
+            processed_at=datetime.now(),
+            processed_count=valid_rows,
+            failed_count=len(errors),
+            error_message='\n'.join(errors[:100]) if errors else ''
+        )
+        
+        return JsonResponse({
                 'success': True,
                 'message': f'Successfully processed {valid_rows} invitations. Errors: {len(errors)}',
                 'valid_count': valid_rows,
                 'error_count': len(errors),
+                'duplicate_counts': duplicate_counts,  # Add duplicate counts
+                'duplicate_emails': list(set(duplicate_emails)),  # List unique duplicates
                 'errors': errors[:10],
                 'csv_upload_id': csv_upload.id,
                 'created_invitations': created_invitations
             })
+    
+    else:
+        # For large files - create CSV record first, then process in background
+        csv_upload = InvitationCSVUpload.objects.create(
+            event=event,
+            file=csv_file,
+            status='processing',
+            processed=False,
+            processed_count=0,
+            failed_count=0
+        )
         
-        else:
-            # For large files - create CSV record first, then process in background
-            csv_upload = InvitationCSVUpload.objects.create(
-                event=event,
-                file=csv_file,
-                status='processing',
-                processed=False,
-                processed_count=0,
-                failed_count=0
-            )
-            
-            send_bulk_invitations.delay(csv_upload.id, expire_date_str, default_message)
-            
-            return JsonResponse({
-                'success': True,
-                'message': 'Large file is being processed in the background.',
-                'csv_upload_id': csv_upload.id,
-            })
-            
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        print("initiating bulk task for large file")
+        #send_bulk_invitations(csv_upload.id, expire_date_str, default_message)
+        send_bulk_invitations.delay(csv_upload.id, expire_date_str, default_message)
+        print("bulk task initiated for large file")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Large file is being processed in the background.',
+            'csv_upload_id': csv_upload.id,
+            'duplicate_counts': duplicate_counts,
+            'duplicate_emails': duplicate_emails
+        })
+        
+    # except Exception as e:
+    #     print('Error in bulk invitation:', str(e))
+    #     return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+
+
     
 
 from django.http import JsonResponse, FileResponse, HttpResponse

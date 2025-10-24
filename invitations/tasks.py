@@ -53,6 +53,7 @@ def send_invitation_email(invitation_id):
 
 @shared_task
 def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
+    print(f'Starting bulk invitation processing for CSV upload ID {csv_upload_id}')
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f'Starting bulk invitation processing for CSV upload ID {csv_upload_id}')
@@ -64,6 +65,8 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
     errors = []
     created_invitations = []
     valid_rows = 0
+    duplicate_count = 0
+    duplicate_emails = []
     
     try:
         invite_upload = InvitationCSVUpload.objects.get(id=csv_upload_id)
@@ -100,16 +103,21 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
             email_counts[email] = email_counts.get(email, 0) + 1
         csv_duplicates = [email for email, count in email_counts.items() if count > 1]
         if csv_duplicates:
+            duplicate_count += len(csv_duplicates)
             errors.append(f'Warning: Duplicate emails in CSV: {", ".join(csv_duplicates[:5])}{"..." if len(csv_duplicates) > 5 else ""}')
-        
+            duplicate_emails.extend(csv_duplicates)
+
         existing_invitations = Invitation.objects.filter(
             event=event,
             email__in=emails
         ).values_list('email', flat=True)
         existing_emails = set(existing_invitations)
         if existing_emails:
+            new_duplicates = [email for email in existing_emails if email not in duplicate_emails]
+            duplicate_count += len(new_duplicates)
             errors.append(f'Warning: Emails already in database: {", ".join(list(existing_emails)[:5])}{"..." if len(existing_emails) > 5 else ""}')
-        
+            duplicate_emails.extend(new_duplicates)
+
         # Reset reader for processing
         csv_file.seek(0)
         csv_data = csv_file.read().decode('utf-8')
@@ -136,7 +144,7 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
                 errors.append(f'Row {row_num}: Invalid ticket type "{ticket_type}". Must be one of {valid_ticket_types}')
                 continue
             
-            if email in csv_duplicates or email in existing_emails:
+            if email in existing_emails:
                 errors.append(f'Row {row_num}: Skipping duplicate email "{email}"')
                 continue
             
@@ -176,6 +184,7 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
         invite_upload.failed_count = len(errors)
         invite_upload.error_log = '\n'.join(errors)
         invite_upload.processed_at = timezone.now()
+        invite_upload.duplicate_count = duplicate_count
         invite_upload.save()
         
     except Exception as e:
@@ -184,6 +193,7 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
         invite_upload.status = 'failed'
         invite_upload.error_log = '\n'.join(errors)
         invite_upload.processed_at = timezone.now()
+        invite_upload.duplicate_count = duplicate_count
         invite_upload.save()
         raise
     logger.info(f'Completed processing: {valid_rows} valid rows, {len(errors)} errors: {errors}')
@@ -243,6 +253,7 @@ def export_invitations_task(self, export_format):
             output = export_csv(invitations, export_job, total_invitations)
         elif export_format == 'excel':
             output = export_excel(invitations, export_job, total_invitations)
+            export_format = 'xlsx'
         elif export_format == 'pdf':
             output = export_pdf(invitations, export_job, total_invitations)
         else:

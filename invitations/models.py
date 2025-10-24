@@ -50,6 +50,7 @@ class InvitationCSVUpload(models.Model):
     processed = models.BooleanField(default=False)
     processed_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
+    duplicate_count = models.PositiveIntegerField(default=0)
     processed_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=50, default='pending')
     error_message = models.TextField(blank=True, null=True)

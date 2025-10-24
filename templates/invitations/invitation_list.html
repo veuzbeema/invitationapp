@@ -443,6 +443,7 @@
                                 <span class="badge bg-success" id="validRowsCount">0 Valid</span>
                                 <span class="badge bg-danger" id="invalidRowsCount">0 Invalid</span>
                                 <span class="badge bg-info" id="duplicateRowsCount">0 Duplicate</span>
+                                <span class="badge bg-info" id="distinctDuplicateEmails">0 Distinct Duplicate Emails</span>
                                 <span class="badge bg-info" id="totalRowsCount">0 Total</span>
                             </div>
                         </div>
@@ -625,37 +626,62 @@
             }
 
             // Update validation counts
-            function updateValidationCounts() {
+           function updateValidationCounts() {
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
-                let validCount = 0;
+                let validCount   = 0;
                 let invalidCount = 0;
-                let duplicateCount = 0;
+                let duplicateRowsCount = 0;      // total rows that are duplicates
+                let distinctDuplicateEmails = 0; // how many different e-mails are duplicated
+
+                // -----------------------------------------------------------------
+                // 1. Track how many times each e-mail appears (only valid e-mails)
+                // -----------------------------------------------------------------
+                const emailFreq = {};   // { email: occurrences }
 
                 csvData.forEach(row => {
                     const hasValidTicketType = validTicketTypes.includes(row.ticketType);
-                    const hasValidEmail = row.email && validateEmail(row.email);
-                    const isDuplicate = checkDuplicateEmail(row.index, row.email);
-                    const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
-                    
+                    const hasValidEmail      = row.email && validateEmail(row.email);
+                    const isDuplicate        = checkDuplicateEmail(row.index, row.email);
+                    const isValid            = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+
+                    // Count frequency of **valid** e-mails
+                    if (hasValidEmail) {
+                        emailFreq[row.email] = (emailFreq[row.email] || 0) + 1;
+                    }
+
                     if (isValid) {
                         validCount++;
                     } else {
                         invalidCount++;
-                        if (isDuplicate) duplicateCount++;
+                        if (isDuplicate) duplicateRowsCount++;   // keep the original flag for UI
                     }
                 });
 
+                // -----------------------------------------------------------------
+                // 2. Compute distinct duplicates + total extra rows
+                // -----------------------------------------------------------------
+                for (const count of Object.values(emailFreq)) {
+                    if (count > 1) {
+                        distinctDuplicateEmails++;          // one distinct e-mail
+                        // duplicateRowsCount += ( examples-1 ); // all rows after the first
+                    }
+                }
+
+                // -----------------------------------------------------------------
+                // 3. UI update
+                // -----------------------------------------------------------------
                 $('#csvPreviewSection').show();
+
                 $('#validRowsCount').text(`${validCount} Valid`);
                 $('#invalidRowsCount').text(`${invalidCount} Invalid`);
                 $('#totalRowsCount').text(`${csvData.length} Total`);
-                $('#duplicateRowsCount').text(`${duplicateCount} Duplicate Emails`);
 
-                if (validCount > 0) {
-                    $('#sendBulkInviteBtn').prop('disabled', false);
-                } else {
-                    $('#sendBulkInviteBtn').prop('disabled', true);
-                }
+                // <-- NEW UI ELEMENTS (add these IDs to your HTML) -->
+                $('#duplicateRowsCount').text(`${duplicateRowsCount} Duplicate Rows`);
+                $('#distinctDuplicateEmails').text(`${distinctDuplicateEmails} Distinct Duplicate Emails`);
+
+                // Enable/disable bulk-invite button
+                $('#sendBulkInviteBtn').prop('disabled', validCount === 0);
             }
 
             // Update pagination controls
@@ -785,10 +811,19 @@
                 if ($row.length) {
                     if (isValid) {
                         $row.removeClass('table-danger');
-                        $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
+                         if (isDuplicate) {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Duplicate Email</span>');
+                        } else {
+                             $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
+                        }
                     } else {
                         $row.addClass('table-danger');
-                        $row.find('td:eq(5)').html(`<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`);
+                        // PRIORITY: Duplicate > Invalid
+                        if (isDuplicate) {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Duplicate Email</span>');
+                        } else {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Invalid</span>');
+                        }
                     }
                 }
 
@@ -1007,7 +1042,7 @@
             Swal.fire({
                 icon: 'warning',
                 title: 'Duplicate Emails Found',
-                html: `The following emails are duplicated:<br><strong>${[...new Set(duplicates)].join(', ')}</strong><br><br>Do you want to continue?`,
+                html: `There are <strong>${duplicates.length}</strong> duplicate email(s) in the file.<br><br>Do you want to continue?`,
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Continue',
                 cancelButtonText: 'No, Fix It'
