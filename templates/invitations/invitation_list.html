@@ -411,7 +411,17 @@
                             <hr>
                             <h6 class="mb-3">
                                 <i class="fas fa-eye me-2"></i>CSV Preview
+                                <span class="badge bg-warning text-dark ms-2" id="modifiedIndicator" style="display: none;">Modified</span>
                                 <div class="float-end">
+                                    <button type="button" class="btn btn-sm btn-info me-2" id="downloadCsvBtn" title="Download modified CSV">
+                                        <i class="fas fa-download me-1"></i>Download CSV
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-warning me-2" id="clearDuplicatesBtn" title="Remove all duplicate rows">
+                                        <i class="fas fa-copy me-1"></i>Clear Duplicates
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-warning me-2" id="clearInvalidBtn" title="Remove all invalid rows">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Clear Invalid
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-success me-2" id="addManualRowBtn">
                                         <i class="fas fa-plus me-1"></i>Add Row
                                     </button>
@@ -420,8 +430,8 @@
                                     </button>
                                 </div>
                             </h6>
-                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                                <table class="table table-sm table-bordered" id="csvPreviewTable">
+                            <div class="table-responsive" id="csvTableContainer" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-bordered mb-0" id="csvPreviewTable">
                                     <thead class="table-light sticky-top">
                                         <tr>
                                             <th>#</th>
@@ -443,6 +453,7 @@
                                 <span class="badge bg-success" id="validRowsCount">0 Valid</span>
                                 <span class="badge bg-danger" id="invalidRowsCount">0 Invalid</span>
                                 <span class="badge bg-info" id="duplicateRowsCount">0 Duplicate</span>
+                                <span class="badge bg-info" id="distinctDuplicateEmails">0 Distinct Duplicate Emails</span>
                                 <span class="badge bg-info" id="totalRowsCount">0 Total</span>
                             </div>
                         </div>
@@ -579,83 +590,60 @@
                 return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
             }
 
-            // Add preview row with editable ticket type and delete button
+            // DEPRECATED: This function is replaced by createPreviewRowHTML for better performance
+            // Kept for backward compatibility if needed elsewhere
             function addPreviewRow(row, validTicketTypes) {
-                const hasValidTicketType = validTicketTypes.includes(row.ticketType);
-                const hasValidEmail = row.email && validateEmail(row.email);
-                const isDuplicate = checkDuplicateEmail(row.index, row.email);
-                const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
-
-                const statusBadge = isValid 
-                    ? '<span class="badge bg-success">Valid</span>' 
-                    : `<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`;
-
-                const ticketTypeSelect = `
-                    <select class="form-select form-select-sm ticket-type-select" data-index="${row.index}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px; background-color: white;">
-                        <option value="">Select Type</option>
-                        <option value="visitor" ${row.ticketType === 'visitor' ? 'selected' : ''}>Visitor</option>
-                        <option value="vip" ${row.ticketType === 'vip' ? 'selected' : ''}>VIP</option>
-                        <option value="gold" ${row.ticketType === 'gold' ? 'selected' : ''}>Gold</option>
-                        <option value="platinum" ${row.ticketType === 'platinum' ? 'selected' : ''}>Platinum</option>
-                        <option value="exhibitor" ${row.ticketType === 'exhibitor' ? 'selected' : ''}>Exhibitor</option>
-                    </select>
-                `;
-
-                const nameInput = `<input type="text" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="name" value="${row.name}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;">`;
-                const emailInput = `<input type="email" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="email" value="${row.email}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;">`;
-                const companyInput = `<input type="text" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="company" value="${row.company}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;">`;
-
-                const deleteBtn = `
-                    <button class="btn btn-sm btn-danger delete-row-btn" data-index="${row.index}" style="font-size: 10px; padding: 2px 6px;">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                `;
-
-                $('#csvPreviewBody').append(`
-                    <tr data-index="${row.index}" class="${isValid ? '' : 'table-danger'}">
-                        <td>${row.index}</td>
-                        <td>${nameInput}</td>
-                        <td>${emailInput}</td>
-                        <td>${ticketTypeSelect}</td>
-                        <td>${companyInput}</td>
-                        <td>${statusBadge}</td>
-                        <td class="text-center">${deleteBtn}</td>
-                    </tr>
-                `);
+                $('#csvPreviewBody').append(createPreviewRowHTML(row, validTicketTypes));
             }
 
-            // Update validation counts
+            // OPTIMIZED: Update validation counts with efficient counting
             function updateValidationCounts() {
+                const startTime = performance.now();
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
+
                 let validCount = 0;
                 let invalidCount = 0;
-                let duplicateCount = 0;
+                let duplicateRowsCount = 0;
+                let distinctDuplicateEmails = 0;
 
+                // OPTIMIZATION 1: Rebuild email cache once for all validations
+                rebuildEmailCache();
+
+                // OPTIMIZATION 2: Count using the cache instead of repeated lookups
                 csvData.forEach(row => {
                     const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                     const hasValidEmail = row.email && validateEmail(row.email);
                     const isDuplicate = checkDuplicateEmail(row.index, row.email);
                     const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
-                    
+
                     if (isValid) {
                         validCount++;
                     } else {
                         invalidCount++;
-                        if (isDuplicate) duplicateCount++;
+                        if (isDuplicate) duplicateRowsCount++;
                     }
                 });
 
-                $('#csvPreviewSection').show();
-                $('#validRowsCount').text(`${validCount} Valid`);
-                $('#invalidRowsCount').text(`${invalidCount} Invalid`);
-                $('#totalRowsCount').text(`${csvData.length} Total`);
-                $('#duplicateRowsCount').text(`${duplicateCount} Duplicate Emails`);
-
-                if (validCount > 0) {
-                    $('#sendBulkInviteBtn').prop('disabled', false);
-                } else {
-                    $('#sendBulkInviteBtn').prop('disabled', true);
+                // OPTIMIZATION 3: Count distinct duplicates directly from cache
+                for (const [email, indices] of emailIndexCache.entries()) {
+                    if (indices.size > 1) {
+                        distinctDuplicateEmails++;
+                    }
                 }
+
+                // UI update
+                $('#csvPreviewSection').show();
+                $('#validRowsCount').text(`${validCount.toLocaleString()} Valid`);
+                $('#invalidRowsCount').text(`${invalidCount.toLocaleString()} Invalid`);
+                $('#totalRowsCount').text(`${csvData.length.toLocaleString()} Total`);
+                $('#duplicateRowsCount').text(`${duplicateRowsCount.toLocaleString()} Duplicate Rows`);
+                $('#distinctDuplicateEmails').text(`${distinctDuplicateEmails.toLocaleString()} Distinct Duplicate Emails`);
+
+                // Enable/disable bulk-invite button
+                $('#sendBulkInviteBtn').prop('disabled', validCount === 0);
+
+                const elapsed = performance.now() - startTime;
+                console.log(`Validation completed in ${elapsed.toFixed(2)}ms`);
             }
 
             // Update pagination controls
@@ -690,92 +678,245 @@
                 $('#paginationControls').html(paginationHtml);
             }
 
-            // Render paginated preview
+            // OPTIMIZED: Render paginated preview with direct innerHTML update
             function renderPreviewPage() {
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
                 const startIndex = (currentPage - 1) * rowsPerPage;
                 const endIndex = Math.min(startIndex + rowsPerPage, csvData.length);
-                
-                $('#csvPreviewBody').empty();
-                
+
+                // OPTIMIZATION 1: Build all HTML in one string
+                let htmlBatch = '';
+
                 for (let i = startIndex; i < endIndex; i++) {
-                    addPreviewRow(csvData[i], validTicketTypes);
+                    htmlBatch += createPreviewRowHTML(csvData[i], validTicketTypes);
                 }
-                
+
+                // OPTIMIZATION 2: Single DOM update - directly set innerHTML on tbody
+                // This is faster and works correctly with table elements (tbody properly parses <tr> tags)
+                const tbody = document.getElementById('csvPreviewBody');
+                tbody.innerHTML = htmlBatch;
+
+                // OPTIMIZATION 3: Adjust container height dynamically to prevent white space
+                adjustTableHeight();
+
                 updatePaginationControls();
             }
 
-            // Parse CSV with chunked processing
+            // Adjust table container height based on content
+            function adjustTableHeight() {
+                const container = document.getElementById('csvTableContainer');
+                const table = document.getElementById('csvPreviewTable');
+
+                if (!container || !table) return;
+
+                const rowsOnPage = document.querySelectorAll('#csvPreviewBody tr').length;
+
+                // If fewer rows, remove fixed height to prevent white space
+                if (rowsOnPage <= 10) {
+                    container.style.maxHeight = 'none';
+                    container.style.overflowY = 'visible';
+                } else {
+                    // Reset to scrollable for many rows
+                    container.style.maxHeight = '400px';
+                    container.style.overflowY = 'auto';
+                }
+            }
+
+            // OPTIMIZED: Create row HTML without jQuery for better performance
+            function createPreviewRowHTML(row, validTicketTypes) {
+                const hasValidTicketType = validTicketTypes.includes(row.ticketType);
+                const hasValidEmail = row.email && validateEmail(row.email);
+                const isDuplicate = checkDuplicateEmail(row.index, row.email);
+                const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+
+                const statusBadge = isValid
+                    ? '<span class="badge bg-success">Valid</span>'
+                    : `<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`;
+
+                const rowClass = isValid ? '' : 'table-danger';
+
+                // Escape HTML to prevent XSS
+                const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (match) => {
+                    const escapeMap = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+                    return escapeMap[match];
+                });
+
+                const nameVal = escapeHtml(row.name);
+                const emailVal = escapeHtml(row.email);
+                const companyVal = escapeHtml(row.company);
+
+                return `
+                    <tr data-index="${row.index}" class="${rowClass}">
+                        <td>${row.index}</td>
+                        <td><input type="text" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="name" value="${nameVal}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;"></td>
+                        <td><input type="email" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="email" value="${emailVal}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;"></td>
+                        <td>
+                            <select class="form-select form-select-sm ticket-type-select" data-index="${row.index}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px; background-color: white;">
+                                <option value="">Select Type</option>
+                                <option value="visitor" ${row.ticketType === 'visitor' ? 'selected' : ''}>Visitor</option>
+                                <option value="vip" ${row.ticketType === 'vip' ? 'selected' : ''}>VIP</option>
+                                <option value="gold" ${row.ticketType === 'gold' ? 'selected' : ''}>Gold</option>
+                                <option value="platinum" ${row.ticketType === 'platinum' ? 'selected' : ''}>Platinum</option>
+                                <option value="exhibitor" ${row.ticketType === 'exhibitor' ? 'selected' : ''}>Exhibitor</option>
+                            </select>
+                        </td>
+                        <td><input type="text" class="form-control form-control-sm editable-field" data-index="${row.index}" data-field="company" value="${companyVal}" style="font-size: 11px; border: 1px solid #ced4da; padding: 4px 8px;"></td>
+                        <td>${statusBadge}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-danger delete-row-btn" data-index="${row.index}" style="font-size: 10px; padding: 2px 6px;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            // OPTIMIZED: Parse CSV with faster regex-based parsing and larger chunks
             function parseCSV(text) {
-                const lines = text.split('\n');
-                const headers = lines[0].split(',').map(h => h.trim());
                 csvData = [];
                 currentPage = 1;
+                csvModified = false; // Reset modified flag for new upload
+                $('#modifiedIndicator').hide();
 
-                // Process rows in chunks to avoid blocking UI
+                // Show progress indicator
+                const startTime = performance.now();
+
+                // OPTIMIZATION 1: Use faster line splitting with pre-allocation
+                const lines = text.split(/\r?\n/);
+                const totalLines = lines.length;
+
+                // Skip header row
                 let rowIndex = 1;
-                const chunkSize = 1000;
-                
+                const chunkSize = 5000; // Increased from 1000 for better performance
+
+                // OPTIMIZATION 2: Pre-compile regex for CSV parsing (handles quoted values)
+                const csvRegex = /(?:,|^)(?:"([^"]*)"|([^",]*))/g;
+
                 function processChunk() {
-                    const endIndex = Math.min(rowIndex + chunkSize, lines.length);
-                    
+                    const endIndex = Math.min(rowIndex + chunkSize, totalLines);
+                    const batchStart = performance.now();
+
+                    // OPTIMIZATION 3: Batch array operations
+                    const batch = [];
+
                     for (let i = rowIndex; i < endIndex; i++) {
-                        if (!lines[i].trim()) continue;
+                        const line = lines[i];
+                        if (!line || !line.trim()) continue;
 
-                        const values = lines[i].split(',').map(v => v.trim());
-                        const row = {
-                            index: i,
-                            name: values[0] || '',
-                            email: values[1] || '',
-                            ticketType: values[2] ? values[2].toLowerCase() : '',
-                            company: values[3] || '',
-                            message: values[4] || ''
-                        };
+                        // OPTIMIZATION 4: Fast CSV parsing with regex
+                        const values = [];
+                        let match;
+                        csvRegex.lastIndex = 0; // Reset regex
 
-                        csvData.push(row);
+                        while ((match = csvRegex.exec(line)) !== null) {
+                            values.push((match[1] || match[2] || '').trim());
+                        }
+
+                        // Only process if we have at least name and email
+                        if (values.length >= 2) {
+                            batch.push({
+                                index: i,
+                                name: values[0] || '',
+                                email: values[1] || '',
+                                ticketType: values[2] ? values[2].toLowerCase() : '',
+                                company: values[3] || '',
+                                message: values[4] || ''
+                            });
+                        }
                     }
-                    
+
+                    // OPTIMIZATION 5: Single array concatenation instead of multiple pushes
+                    csvData = csvData.concat(batch);
                     rowIndex = endIndex;
-                    
-                    // Update progress
-                    const progress = Math.round((rowIndex / lines.length) * 100);
+
+                    const progress = Math.round((rowIndex / totalLines) * 100);
+                    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+
                     Swal.update({
-                        html: `Processing: ${progress}% (${csvData.length} rows)`
+                        html: `
+                            <div style="text-align: left;">
+                                <strong>Processing CSV...</strong><br>
+                                Progress: ${progress}%<br>
+                                Rows loaded: ${csvData.length.toLocaleString()}<br>
+                                Time elapsed: ${elapsed}s
+                            </div>
+                        `
                     });
-                    
-                    if (rowIndex < lines.length) {
-                        // Process next chunk
-                        setTimeout(processChunk, 0);
+
+                    if (rowIndex < totalLines) {
+                        // OPTIMIZATION 6: Use requestAnimationFrame for smoother UI
+                        requestAnimationFrame(() => setTimeout(processChunk, 0));
                     } else {
                         // Done processing
+                        const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+                        console.log(`CSV parsing completed: ${csvData.length} rows in ${totalTime}s`);
+
                         Swal.close();
-                        renderPreviewPage();
-                        updateValidationCounts();
-                        
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'CSV Loaded',
-                            text: `Successfully loaded ${csvData.length} rows`,
-                            timer: 2000,
-                            showConfirmButton: false
-                        });
+
+                        // OPTIMIZATION 7: Defer validation to prevent blocking
+                        setTimeout(() => {
+                            renderPreviewPage();
+                            updateValidationCounts();
+
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'CSV Loaded',
+                                html: `Successfully loaded <strong>${csvData.length.toLocaleString()}</strong> rows in ${totalTime}s`,
+                                timer: 2500,
+                                showConfirmButton: false
+                            });
+                        }, 100);
                     }
                 }
-                
+
                 processChunk();
             }
 
-            // Check for duplicate email
-            function checkDuplicateEmail(currentIndex, email) {
-                return csvData.some((row, index) => row.email.toLowerCase() === email.toLowerCase() && row.index !== currentIndex);
+            // OPTIMIZED: Email lookup cache for fast duplicate detection
+            let emailIndexCache = new Map(); // email -> Set of indices
+
+            // Rebuild email cache after data changes
+            function rebuildEmailCache() {
+                emailIndexCache.clear();
+                csvData.forEach((row) => {
+                    if (row.email) {
+                        const emailLower = row.email.toLowerCase();
+                        if (!emailIndexCache.has(emailLower)) {
+                            emailIndexCache.set(emailLower, new Set());
+                        }
+                        emailIndexCache.get(emailLower).add(row.index);
+                    }
+                });
             }
 
-            // Validate and update row appearance
-            function validateAndUpdateRow(index) {
+            // OPTIMIZED: O(1) duplicate check using cache instead of O(n) array scan
+            function checkDuplicateEmail(currentIndex, email) {
+                if (!email) return false;
+                const emailLower = email.toLowerCase();
+                const indices = emailIndexCache.get(emailLower);
+                if (!indices) return false;
+                // Duplicate if there are other rows with same email
+                return indices.size > 1 || (indices.size === 1 && !indices.has(currentIndex));
+            }
+
+            // OPTIMIZED: Debounce helper for validation
+            let validationDebounceTimer = null;
+
+            function debounceValidation(callback, delay = 300) {
+                clearTimeout(validationDebounceTimer);
+                validationDebounceTimer = setTimeout(callback, delay);
+            }
+
+            // OPTIMIZED: Validate and update row appearance with caching
+            function validateAndUpdateRow(index, skipFullValidation = false) {
                 const rowData = csvData.find(r => r.index === index);
                 if (!rowData) return;
 
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
+
+                // Update email cache if email changed
+                rebuildEmailCache();
+
                 const hasValidTicketType = validTicketTypes.includes(rowData.ticketType);
                 const hasValidEmail = rowData.email && validateEmail(rowData.email);
                 const isDuplicate = checkDuplicateEmail(rowData.index, rowData.email);
@@ -785,14 +926,25 @@
                 if ($row.length) {
                     if (isValid) {
                         $row.removeClass('table-danger');
-                        $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
+                        if (isDuplicate) {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Duplicate Email</span>');
+                        } else {
+                            $row.find('td:eq(5)').html('<span class="badge bg-success">Valid</span>');
+                        }
                     } else {
                         $row.addClass('table-danger');
-                        $row.find('td:eq(5)').html(`<span class="badge bg-danger">${isDuplicate ? 'Duplicate Email' : 'Invalid'}</span>`);
+                        if (isDuplicate) {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Duplicate Email</span>');
+                        } else {
+                            $row.find('td:eq(5)').html('<span class="badge bg-danger">Invalid</span>');
+                        }
                     }
                 }
 
-                updateValidationCounts();
+                // OPTIMIZATION: Debounce full validation count update
+                if (!skipFullValidation) {
+                    debounceValidation(() => updateValidationCounts());
+                }
             }
 
             // FILE UPLOAD EVENT
@@ -828,11 +980,12 @@
             $(document).on('change', '.ticket-type-select', function() {
                 const index = $(this).data('index');
                 const newTicketType = $(this).val();
-                
+
                 // Update csvData
                 const rowData = csvData.find(r => r.index === index);
                 if (rowData) {
                     rowData.ticketType = newTicketType;
+                    markAsModified(); // Mark as modified
                 }
 
                 validateAndUpdateRow(index);
@@ -843,29 +996,33 @@
                 const index = $(this).data('index');
                 const field = $(this).data('field');
                 const value = $(this).val().trim();
-                
+
                 // Update csvData
                 const rowData = csvData.find(r => r.index === index);
                 if (rowData) {
                     rowData[field] = value;
+                    markAsModified(); // Mark as modified
                 }
 
                 validateAndUpdateRow(index);
             });
 
-            // Handle row deletion
+            // OPTIMIZED: Handle row deletion with cache update
             $(document).on('click', '.delete-row-btn', function() {
                 const index = $(this).data('index');
-                
+
                 // Remove from csvData
                 csvData = csvData.filter(r => r.index !== index);
-                
+                markAsModified(); // Mark as modified
+
+                // OPTIMIZATION: Rebuild cache after deletion (called in updateValidationCounts)
+
                 // Re-render current page
                 const totalPages = Math.ceil(csvData.length / rowsPerPage);
                 if (currentPage > totalPages && totalPages > 0) {
                     currentPage = totalPages;
                 }
-                
+
                 renderPreviewPage();
                 updateValidationCounts();
 
@@ -873,6 +1030,9 @@
                 if (csvData.length === 0) {
                     $('#csvPreviewSection').hide();
                     $('#sendBulkInviteBtn').prop('disabled', true);
+                    emailIndexCache.clear(); // Clear cache
+                    csvModified = false; // Reset modified flag
+                    $('#modifiedIndicator').hide();
                 }
             });
 
@@ -902,7 +1062,7 @@
                 renderPreviewPage();
             });
 
-            // Clear all preview
+            // OPTIMIZED: Clear all preview with cache cleanup
             $('#clearPreviewBtn').on('click', function() {
                 Swal.fire({
                     icon: 'warning',
@@ -915,6 +1075,9 @@
                     if (result.isConfirmed) {
                         csvData = [];
                         currentPage = 1;
+                        emailIndexCache.clear(); // Clear cache
+                        csvModified = false; // Reset modified flag
+                        $('#modifiedIndicator').hide();
                         $('#csvPreviewBody').empty();
                         $('#csvPreviewSection').hide();
                         $('#sendBulkInviteBtn').prop('disabled', true);
@@ -944,6 +1107,7 @@
                 };
 
                 csvData.push(newRow);
+                markAsModified(); // Mark as modified
 
                 // Go to last page where new row will be
                 currentPage = Math.ceil(csvData.length / rowsPerPage);
@@ -968,6 +1132,196 @@
                 // });
             });
 
+            // Track if CSV has been modified
+            let csvModified = false;
+
+            function markAsModified() {
+                csvModified = true;
+                $('#modifiedIndicator').show();
+            }
+
+            // Clear Duplicates Button
+            $('#clearDuplicatesBtn').on('click', function() {
+                rebuildEmailCache();
+
+                // Count duplicates before removal
+                let duplicateCount = 0;
+                const emailsSeen = new Set();
+                const rowsToKeep = [];
+
+                csvData.forEach(row => {
+                    const emailLower = row.email ? row.email.toLowerCase() : '';
+                    if (emailLower && emailsSeen.has(emailLower)) {
+                        duplicateCount++;
+                    } else {
+                        if (emailLower) emailsSeen.add(emailLower);
+                        rowsToKeep.push(row);
+                    }
+                });
+
+                if (duplicateCount === 0) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'No Duplicates',
+                        text: 'No duplicate email addresses found',
+                        timer: 2000
+                    });
+                    return;
+                }
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Remove Duplicates?',
+                    html: `This will remove <strong>${duplicateCount}</strong> duplicate row(s).<br>Only the first occurrence of each email will be kept.`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, Remove Duplicates',
+                    confirmButtonColor: '#f0ad4e'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        csvData = rowsToKeep;
+                        markAsModified();
+
+                        // Adjust current page if needed
+                        const totalPages = Math.ceil(csvData.length / rowsPerPage);
+                        if (currentPage > totalPages && totalPages > 0) {
+                            currentPage = totalPages;
+                        }
+
+                        renderPreviewPage();
+                        updateValidationCounts();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Duplicates Removed',
+                            text: `Removed ${duplicateCount} duplicate row(s)`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    }
+                });
+            });
+
+            // Clear Invalid Button
+            $('#clearInvalidBtn').on('click', function() {
+                const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
+                rebuildEmailCache();
+
+                const validRows = csvData.filter(row => {
+                    const hasValidTicketType = validTicketTypes.includes(row.ticketType);
+                    const hasValidEmail = row.email && validateEmail(row.email);
+                    const isDuplicate = checkDuplicateEmail(row.index, row.email);
+                    return row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+                });
+
+                const invalidCount = csvData.length - validRows.length;
+
+                if (invalidCount === 0) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'No Invalid Rows',
+                        text: 'All rows are valid',
+                        timer: 2000
+                    });
+                    return;
+                }
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Remove Invalid Rows?',
+                    html: `This will remove <strong>${invalidCount}</strong> invalid row(s).<br>Invalid rows include those with missing data, invalid emails, invalid ticket types, or duplicates.`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, Remove Invalid',
+                    confirmButtonColor: '#f0ad4e'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // DEBUG: Before clearing invalid
+                        console.log('=== CLEAR INVALID DEBUG ===');
+                        console.log('Before - Total rows:', csvData.length);
+                        console.log('Before - Valid rows:', validRows.length);
+                        console.log('Before - Invalid count:', invalidCount);
+
+                        csvData = validRows;
+                        markAsModified();
+
+                        console.log('After - csvData length:', csvData.length);
+                        console.log('After - First 3 rows:', csvData.slice(0, 3));
+
+                        // Adjust current page if needed
+                        const totalPages = Math.ceil(csvData.length / rowsPerPage);
+                        if (currentPage > totalPages && totalPages > 0) {
+                            currentPage = totalPages;
+                        }
+
+                        renderPreviewPage();
+                        updateValidationCounts();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Invalid Rows Removed',
+                            text: `Removed ${invalidCount} invalid row(s). ${validRows.length} valid row(s) remaining.`,
+                            timer: 2500,
+                            showConfirmButton: false
+                        });
+                    }
+                });
+            });
+
+            // Download Modified CSV
+            $('#downloadCsvBtn').on('click', function() {
+                if (csvData.length === 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Data',
+                        text: 'No data to download',
+                        timer: 2000
+                    });
+                    return;
+                }
+
+                // Build CSV content
+                let csvContent = 'Full Name,Email,Ticket Type,Company Name,Personal Message\n';
+
+                csvData.forEach(row => {
+                    // Escape fields that contain commas or quotes
+                    const escapeCsvField = (field) => {
+                        if (!field) return '';
+                        const str = String(field);
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return `"${str.replace(/"/g, '""')}"`;
+                        }
+                        return str;
+                    };
+
+                    csvContent += `${escapeCsvField(row.name)},${escapeCsvField(row.email)},${escapeCsvField(row.ticketType)},${escapeCsvField(row.company)},${escapeCsvField(row.message || '')}\n`;
+                });
+
+                // Create and download file
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+
+                // Generate filename with timestamp
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const filename = csvModified
+                    ? `modified_invitations_${timestamp}.csv`
+                    : `invitations_${timestamp}.csv`;
+
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'CSV Downloaded',
+                    text: `Downloaded ${csvData.length} row(s)`,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            });
+
             // Download CSV Template
             $('#downloadTemplateBtn').on('click', function() {
                 const csvContent = 'Full Name,Email,Ticket Type,Company Name,Personal Message\nJohn Doe,john@example.com,visitor,ABC Corp,Looking forward to seeing you\nJane Smith,jane@example.com,vip,XYZ Inc,';
@@ -983,10 +1337,19 @@
             // Send Bulk - AJAX with FormData for file
       $('#sendBulkInviteBtn').click(function() {
     if ($('#bulkPersonalizedForm')[0].checkValidity() && csvData.length > 0) {
-        const validRows = csvData.filter(row => 
+        // DEBUG: Check csvData before filtering
+        console.log('=== SUBMIT DEBUG ===');
+        console.log('Total csvData rows:', csvData.length);
+        console.log('First 3 rows of csvData:', csvData.slice(0, 3));
+        console.log('Last 3 rows of csvData:', csvData.slice(-3));
+
+        const validRows = csvData.filter(row =>
             row.name && row.email && validateEmail(row.email) && row.ticketType
         );
-        
+
+        console.log('Valid rows after filter:', validRows.length);
+        console.log('First 3 valid rows:', validRows.slice(0, 3));
+
         if (validRows.length === 0) {
             Swal.fire('Error', 'No valid rows to send', 'error');
             return;
@@ -1007,7 +1370,7 @@
             Swal.fire({
                 icon: 'warning',
                 title: 'Duplicate Emails Found',
-                html: `The following emails are duplicated:<br><strong>${[...new Set(duplicates)].join(', ')}</strong><br><br>Do you want to continue?`,
+                html: `There are <strong>${duplicates.length}</strong> duplicate email(s) in the file.<br><br>Do you want to continue?`,
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Continue',
                 cancelButtonText: 'No, Fix It'
@@ -1036,20 +1399,32 @@ function proceedWithSend(validRows) {
     }).then((result) => {
         if (result.isConfirmed) {
             const formData = new FormData();
-            
+
             // ✅ REGENERATE CSV FROM csvData (includes added/edited rows)
             const csvContent = generateCSVFromData(validRows);
+            console.log('Generated CSV Content:', csvContent);
+            console.log('CSV Length:', csvContent.length);
+            console.log('Valid Rows Count:', validRows.length);
+
             const csvBlob = new Blob([csvContent], { type: 'text/csv' });
             const csvFile = new File([csvBlob], 'bulk_invitations.csv', { type: 'text/csv' });
-            
+
+            console.log('CSV File Size:', csvFile.size);
+
             const maxFileSizeMB = 1;
             const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
             const fileSize = csvFile.size;
-            
+
             formData.append('bulkCsvFile', csvFile);
             formData.append('isLargeFile', fileSize > maxFileSizeBytes ? 'true' : 'false');
             formData.append('bulkPersonalMessage', $('#bulkPersonalMessage').val());
             formData.append('bulkExpireDate', $('#bulkExpireDate').val());
+
+            // Debug FormData
+            console.log('FormData entries:');
+            for (let pair of formData.entries()) {
+                console.log(pair[0], pair[1]);
+            }
             
             $.ajax({
                 url: '{% url "invitations:send_bulk_personalized_invitation" %}',
