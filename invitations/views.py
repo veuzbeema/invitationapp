@@ -1074,13 +1074,6 @@ from django.http import HttpResponse
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 import csv
-import io
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
 from datetime import datetime
 from .tasks import export_invitations_task
 from celery.result import AsyncResult
