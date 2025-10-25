@@ -590,6 +590,22 @@
                 return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
             }
 
+            // Validate Full Name - only letters, spaces, hyphens, and apostrophes allowed
+            function validateFullName(name) {
+                if (!name || !name.trim()) return false;
+                // Allow letters (including accented), spaces, hyphens, apostrophes, and dots
+                // Examples: "John Doe", "Mary-Jane O'Brien", "José García", "Dr. Smith"
+                const nameRegex = /^[a-zA-ZÀ-ÿ\s'\-\.]+$/;
+                return nameRegex.test(name.trim());
+            }
+
+            // Sanitize Full Name - remove invalid characters
+            function sanitizeFullName(name) {
+                if (!name) return '';
+                // Remove numbers and special characters, keep only valid characters
+                return name.replace(/[^a-zA-ZÀ-ÿ\s'\-\.]/g, '');
+            }
+
             // DEPRECATED: This function is replaced by createPreviewRowHTML for better performance
             // Kept for backward compatibility if needed elsewhere
             function addPreviewRow(row, validTicketTypes) {
@@ -611,10 +627,11 @@
 
                 // OPTIMIZATION 2: Count using the cache instead of repeated lookups
                 csvData.forEach(row => {
+                    const hasValidName = row.name && validateFullName(row.name);
                     const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                     const hasValidEmail = row.email && validateEmail(row.email);
                     const isDuplicate = checkDuplicateEmail(row.index, row.email);
-                    const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+                    const isValid = hasValidName && hasValidEmail && hasValidTicketType && !isDuplicate;
 
                     if (isValid) {
                         validCount++;
@@ -680,6 +697,10 @@
 
             // OPTIMIZED: Render paginated preview with direct innerHTML update
             function renderPreviewPage() {
+                // IMPORTANT: Always rebuild email cache before rendering
+                // This ensures duplicate detection is accurate with current csvData
+                rebuildEmailCache();
+
                 const validTicketTypes = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor'];
                 const startIndex = (currentPage - 1) * rowsPerPage;
                 const endIndex = Math.min(startIndex + rowsPerPage, csvData.length);
@@ -724,10 +745,11 @@
 
             // OPTIMIZED: Create row HTML without jQuery for better performance
             function createPreviewRowHTML(row, validTicketTypes) {
+                const hasValidName = row.name && validateFullName(row.name);
                 const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                 const hasValidEmail = row.email && validateEmail(row.email);
                 const isDuplicate = checkDuplicateEmail(row.index, row.email);
-                const isValid = row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+                const isValid = hasValidName && hasValidEmail && hasValidTicketType && !isDuplicate;
 
                 const statusBadge = isValid
                     ? '<span class="badge bg-success">Valid</span>'
@@ -895,8 +917,8 @@
                 const emailLower = email.toLowerCase();
                 const indices = emailIndexCache.get(emailLower);
                 if (!indices) return false;
-                // Duplicate if there are other rows with same email
-                return indices.size > 1 || (indices.size === 1 && !indices.has(currentIndex));
+                // Duplicate if there are multiple rows with same email (size > 1)
+                return indices.size > 1;
             }
 
             // OPTIMIZED: Debounce helper for validation
@@ -917,10 +939,11 @@
                 // Update email cache if email changed
                 rebuildEmailCache();
 
+                const hasValidName = rowData.name && validateFullName(rowData.name);
                 const hasValidTicketType = validTicketTypes.includes(rowData.ticketType);
                 const hasValidEmail = rowData.email && validateEmail(rowData.email);
                 const isDuplicate = checkDuplicateEmail(rowData.index, rowData.email);
-                const isValid = rowData.name && hasValidEmail && hasValidTicketType;
+                const isValid = hasValidName && hasValidEmail && hasValidTicketType;
 
                 const $row = $(`tr[data-index="${index}"]`);
                 if ($row.length) {
@@ -991,11 +1014,44 @@
                 validateAndUpdateRow(index);
             });
 
-            // Handle editable field changes
+            // Handle editable field changes with validation
             $(document).on('blur', '.editable-field', function() {
-                const index = $(this).data('index');
-                const field = $(this).data('field');
-                const value = $(this).val().trim();
+                const $input = $(this);
+                const index = $input.data('index');
+                const field = $input.data('field');
+                let value = $input.val().trim();
+
+                // Field-specific validation and sanitization
+                if (field === 'name') {
+                    // Sanitize name: remove numbers and invalid special characters
+                    const sanitized = sanitizeFullName(value);
+                    if (sanitized !== value) {
+                        value = sanitized;
+                        $input.val(value);
+
+                        // Show warning if characters were removed
+                        if (value !== '') {
+                            $input.css('border-color', '#ffc107'); // Yellow border
+                            setTimeout(() => {
+                                $input.css('border-color', '');
+                            }, 2000);
+                        }
+                    }
+
+                    // Visual feedback for invalid name
+                    if (value && !validateFullName(value)) {
+                        $input.addClass('is-invalid');
+                    } else {
+                        $input.removeClass('is-invalid');
+                    }
+                } else if (field === 'email') {
+                    // Visual feedback for invalid email
+                    if (value && !validateEmail(value)) {
+                        $input.addClass('is-invalid');
+                    } else {
+                        $input.removeClass('is-invalid');
+                    }
+                }
 
                 // Update csvData
                 const rowData = csvData.find(r => r.index === index);
@@ -1005,6 +1061,31 @@
                 }
 
                 validateAndUpdateRow(index);
+            });
+
+            // Real-time validation on input (for immediate feedback)
+            $(document).on('input', '.editable-field', function() {
+                const $input = $(this);
+                const field = $input.data('field');
+                const value = $input.val();
+
+                if (field === 'name' && value) {
+                    // Show red border if name contains invalid characters
+                    if (!validateFullName(value)) {
+                        $input.css('border-color', '#dc3545'); // Red
+                    } else {
+                        $input.css('border-color', '#28a745'); // Green
+                    }
+                } else if (field === 'email' && value) {
+                    // Show validation state for email
+                    if (!validateEmail(value)) {
+                        $input.css('border-color', '#dc3545'); // Red
+                    } else {
+                        $input.css('border-color', '#28a745'); // Green
+                    }
+                } else {
+                    $input.css('border-color', ''); // Reset
+                }
             });
 
             // OPTIMIZED: Handle row deletion with cache update
@@ -1187,6 +1268,7 @@
                             currentPage = totalPages;
                         }
 
+                        // renderPreviewPage() will rebuild the cache automatically
                         renderPreviewPage();
                         updateValidationCounts();
 
@@ -1207,10 +1289,11 @@
                 rebuildEmailCache();
 
                 const validRows = csvData.filter(row => {
+                    const hasValidName = row.name && validateFullName(row.name);
                     const hasValidTicketType = validTicketTypes.includes(row.ticketType);
                     const hasValidEmail = row.email && validateEmail(row.email);
                     const isDuplicate = checkDuplicateEmail(row.index, row.email);
-                    return row.name && hasValidEmail && hasValidTicketType && !isDuplicate;
+                    return hasValidName && hasValidEmail && hasValidTicketType && !isDuplicate;
                 });
 
                 const invalidCount = csvData.length - validRows.length;
@@ -1344,7 +1427,7 @@
         console.log('Last 3 rows of csvData:', csvData.slice(-3));
 
         const validRows = csvData.filter(row =>
-            row.name && row.email && validateEmail(row.email) && row.ticketType
+            row.name && validateFullName(row.name) && row.email && validateEmail(row.email) && row.ticketType
         );
 
         console.log('Valid rows after filter:', validRows.length);
@@ -1411,7 +1494,7 @@ function proceedWithSend(validRows) {
 
             console.log('CSV File Size:', csvFile.size);
 
-            const maxFileSizeMB = 1;
+            const maxFileSizeMB = 0.2; // 200 KB
             const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
             const fileSize = csvFile.size;
 

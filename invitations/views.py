@@ -593,7 +593,7 @@ def send_bulk_personalized_invitation(request):
 
     # DEBUG: Check CSV content
     print('-------CSV FILE SIZE-------', len(csv_data))
-    # print('-------CSV FIRST 500 CHARS-------', csv_data)
+    print('-------CSV FIRST 500 CHARS-------', csv_data)
 
     csv_reader = csv.DictReader(StringIO(csv_data))
 
@@ -632,25 +632,17 @@ def send_bulk_personalized_invitation(request):
     # The following block was incorrectly placed and caused the 'emails_to_process' error
     # It’s already handled above, so we don’t need it again
 
-
-
     valid_ticket_types = ['visitor', 'vip', 'gold', 'platinum', 'exhibitor']
     valid_rows = 0
     created_invitations = []
 
-
-    print('---------111111-------------', is_large_file)
     if not is_large_file:
         # Reset reader for processing
         csv_file.seek(0)
         csv_data = csv_file.read().decode('utf-8')
         csv_reader = csv.DictReader(StringIO(csv_data))
-
-        print('---------1111e3311-------------', is_large_file)
         
         for row_num, row in enumerate(csv_reader, start=2):
-
-
             
             name = row.get('Full Name', '').strip()
             email = row.get('Email', '').strip().lower()
@@ -1295,7 +1287,7 @@ def bulk_delete(request):
         item_ids = data.get('SelectedIds', [])
         print('-------------data--------', data)
         print('----------------item_ids--------', item_ids)
-        Invitation.objects.filter(id__in=item_ids).delete()
+        Invitation.objects.all().delete()
 
 
         return JsonResponse({

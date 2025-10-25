@@ -129,6 +129,8 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
             ticket_type = row.get('Ticket Type', '').strip().lower()
             company = row.get('Company Name', '').strip()
             personal_message = row.get('Personal Message', default_message).strip()
+
+            print('---------row-------------', row)
             
             if not (name and email and ticket_type):
                 errors.append(f'Row {row_num}: Missing required fields (Full Name, Email, Ticket Type)')
@@ -140,9 +142,9 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
                 errors.append(f'Row {row_num}: Invalid email "{email}"')
                 continue
             
-            if ticket_type not in valid_ticket_types:
-                errors.append(f'Row {row_num}: Invalid ticket type "{ticket_type}". Must be one of {valid_ticket_types}')
-                continue
+            # if ticket_type not in valid_ticket_types:
+            #     errors.append(f'Row {row_num}: Invalid ticket type "{ticket_type}". Must be one of {valid_ticket_types}')
+            #     continue
             
             if email in existing_emails:
                 errors.append(f'Row {row_num}: Skipping duplicate email "{email}"')
@@ -150,6 +152,7 @@ def send_bulk_invitations(csv_upload_id, expire_date_str, default_message):
             
             try:
                 ticket_class = TicketClass.objects.get(event=event, ticket_type=ticket_type)
+                #ticket_class = TicketClass.objects.first()
             except TicketClass.DoesNotExist:
                 errors.append(f'Row {row_num}: Ticket class "{ticket_type}" not found')
                 continue
